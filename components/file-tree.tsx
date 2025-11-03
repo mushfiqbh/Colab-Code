@@ -100,10 +100,10 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
       <div key={file.id}>
         <div
           className={cn(
-            'flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-accent rounded-md transition-colors group relative',
+            'flex items-center gap-2 px-3 cursor-pointer hover:bg-accent rounded-md transition-colors group relative min-h-[44px]',
             isActive && 'bg-accent'
           )}
-          style={{ paddingLeft: `${depth * 16 + 8}px` }}
+          style={{ paddingLeft: `${depth * 16 + 12}px` }}
           onMouseEnter={() => {
             // Preload Monaco when hovering over files
             if (!isFolder) {
@@ -146,7 +146,7 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
               onKeyDown={handleKeyDown}
               onBlur={saveEditing}
               onClick={(e) => e.stopPropagation()}
-              className="flex-1 text-sm bg-background border border-border rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring"
+              className="flex-1 text-sm bg-background border border-border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring min-h-[32px]"
               autoFocus
             />
           ) : (
@@ -156,10 +156,10 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
-                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground p-1 rounded hover:bg-accent transition-opacity"
+                className="opacity-0 group-hover:opacity-100 md:opacity-0 md:group-hover:opacity-100 text-muted-foreground hover:text-foreground p-2 rounded hover:bg-accent transition-opacity min-w-[44px] min-h-[44px] flex items-center justify-center"
                 onClick={(e) => e.stopPropagation()}
               >
-                <MoreVertical className="h-3 w-3" />
+                <MoreVertical className="h-4 w-4" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
@@ -223,7 +223,7 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
                   onKeyDown={handleKeyDown}
                   onBlur={() => saveCreating(editingName)}
                   onClick={(e) => e.stopPropagation()}
-                  className="flex-1 text-sm bg-background border border-border rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="flex-1 text-sm bg-background border border-border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring min-h-[32px]"
                   placeholder={`Enter ${creatingItem.type} name...`}
                   autoFocus
                 />
@@ -239,7 +239,7 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
   return (
     <div className="py-2">
       {creatingItem && !creatingItem.parentId && (
-        <div className="flex items-center gap-2 px-2 py-1.5">
+        <div className="flex items-center gap-2 px-3 py-2 min-h-[44px]">
           {creatingItem.type === 'folder' ? (
             <Folder className="h-4 w-4 flex-shrink-0 text-blue-500" />
           ) : (
@@ -251,7 +251,7 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
             onKeyDown={handleKeyDown}
             onBlur={() => saveCreating(editingName)}
             onClick={(e) => e.stopPropagation()}
-            className="flex-1 text-sm bg-background border border-border rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring"
+            className="flex-1 text-sm bg-background border border-border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring min-h-[32px]"
             placeholder={`Enter ${creatingItem.type} name...`}
             autoFocus
           />

@@ -122,25 +122,25 @@ export function CodeEditor({ onContentChange }: CodeEditorProps) {
     <div className="flex flex-col h-full">
       {/* File Tabs */}
       <div className="flex items-center border-b bg-muted/30 overflow-x-auto">
-        <div className="flex-1 flex">
+        <div className="flex-1 flex min-w-0">
           {openFiles.map((file) => (
             <div
               key={file.id}
-              className={`flex items-center gap-2 px-3 py-2 border-r cursor-pointer hover:bg-muted/50 transition-colors min-w-0 ${
+              className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 border-r cursor-pointer hover:bg-muted/50 transition-colors min-w-0 flex-shrink-0 ${
                 activeFileId === file.id ? 'bg-background border-b-2 border-b-primary' : ''
               }`}
               onClick={() => setActiveFile(file.id)}
             >
-              <span className="text-sm font-medium truncate max-w-32">{file.name}</span>
+              <span className="text-xs sm:text-sm font-medium truncate max-w-20 sm:max-w-32">{file.name}</span>
               {file.language && (
-                <span className="text-xs text-muted-foreground px-1.5 py-0.5 bg-muted rounded">
+                <span className="hidden sm:inline text-xs text-muted-foreground px-1.5 py-0.5 bg-muted rounded">
                   {file.language}
                 </span>
               )}
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-4 w-4 p-0 hover:bg-muted-foreground/20"
+                className="h-6 w-6 sm:h-4 sm:w-4 p-0 hover:bg-muted-foreground/20 min-w-[24px] min-h-[24px]"
                 onClick={(e) => {
                   e.stopPropagation();
                   copyCode(file);
@@ -152,7 +152,7 @@ export function CodeEditor({ onContentChange }: CodeEditorProps) {
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-4 w-4 p-0 hover:bg-destructive/20 hover:text-destructive"
+                className="h-6 w-6 sm:h-4 sm:w-4 p-0 hover:bg-destructive/20 hover:text-destructive min-w-[24px] min-h-[24px]"
                 onClick={(e) => {
                   e.stopPropagation();
                   closeFile(file.id);
@@ -167,7 +167,7 @@ export function CodeEditor({ onContentChange }: CodeEditorProps) {
         <Button
           variant="ghost"
           size="sm"
-          className="px-3 py-2 hover:bg-muted/50"
+          className="px-2 sm:px-3 py-2 hover:bg-muted/50 min-w-[44px] min-h-[44px] flex-shrink-0"
           onClick={downloadAllFiles}
           title="Download all files as ZIP"
         >

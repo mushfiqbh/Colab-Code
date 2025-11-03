@@ -27,7 +27,9 @@ import {
   File,
   Folder,
   RefreshCw,
-  ChevronDown
+  ChevronDown,
+  Menu,
+  X
 } from 'lucide-react';
 import { buildFilePath, getFileLanguage, sortFiles } from '@/lib/file-utils';
 import { useToast } from '@/hooks/use-toast';
@@ -62,6 +64,21 @@ export default function CodespacePage() {
   const [tempName, setTempName] = useState(name);
   const [fileToDelete, setFileToDelete] = useState<FileItem | null>(null);
   const [creatingItem, setCreatingItem] = useState<{ type: 'file' | 'folder'; parentId?: string; name?: string } | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Update document title dynamically
+  useEffect(() => {
+    if (name && name !== 'Untitled Codespace') {
+      document.title = `${name} - Colab Code`;
+    } else {
+      document.title = 'Colab Code - Share Project Codes Instantly';
+    }
+
+    // Cleanup: reset title when component unmounts
+    return () => {
+      document.title = 'Colab Code - Share Project Codes Instantly';
+    };
+  }, [name]);
 
   const loadCodespace = useCallback(async () => {
     try {
@@ -367,6 +384,16 @@ export default function CodespacePage() {
       <header className="border-b bg-background px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
+            {/* Mobile menu button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="md:hidden"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+            >
+              {sidebarOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            </Button>
+
             {editingName ? (
               <Input
                 value={tempName}
@@ -379,12 +406,12 @@ export default function CodespacePage() {
                     setEditingName(false);
                   }
                 }}
-                className="h-8 w-64"
+                className="h-8 w-32 sm:w-64"
                 autoFocus
               />
             ) : (
               <h1
-                className="text-xl font-semibold cursor-pointer hover:text-primary transition-colors"
+                className="text-lg sm:text-xl font-semibold cursor-pointer hover:text-primary transition-colors truncate max-w-32 sm:max-w-none"
                 onClick={() => setEditingName(true)}
               >
                 {name}
@@ -392,7 +419,7 @@ export default function CodespacePage() {
             )}
           </div>
 
-          <Button onClick={handleShare} variant="outline" size="sm">
+          <Button onClick={handleShare} variant="outline" size="sm" className="hidden sm:flex">
             <Share2 className="h-4 w-4 mr-2" />
             Share
           </Button>
@@ -400,9 +427,22 @@ export default function CodespacePage() {
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        <aside className="w-64 border-r bg-muted/30 flex flex-col">
+        {/* Mobile overlay */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 bg-white z-40 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
+        <aside className={`
+          w-64 border-r bg-muted/30 flex flex-col
+          fixed md:relative inset-y-0 left-0 z-50 md:z-auto
+          transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0
+          transition-transform duration-200 ease-in-out
+        `}>
           <div className="p-2 border-b bg-muted/50">
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 flex-wrap">
               <Button
                 onClick={handleNewFile}
                 variant="ghost"
@@ -445,7 +485,10 @@ export default function CodespacePage() {
           <div className="flex-1 overflow-auto">
             <FileTree
               files={files}
-              onFileClick={(file) => openFile(file.id)}
+              onFileClick={(file) => {
+                openFile(file.id);
+                setSidebarOpen(false); // Close sidebar on mobile after selecting file
+              }}
               onDeleteFile={handleDeleteFile}
               onCreateFileInFolder={handleCreateFileInFolder}
               onCreateFolderInFolder={handleCreateFolderInFolder}
