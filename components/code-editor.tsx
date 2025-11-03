@@ -2,13 +2,28 @@
 
 import { FileItem } from '@/lib/supabase';
 import { useCodespaceStore } from '@/store/codespace-store';
-import { useEffect, useState, useRef } from 'react';
-import Editor from '@monaco-editor/react';
+import { useEffect, useState, useRef, Suspense, lazy } from 'react';
 import { Button } from '@/components/ui/button';
-import { X, Copy, Download } from 'lucide-react';
+import { X, Copy, Download, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import JSZip from 'jszip';
+import { preloadMonaco } from '@/lib/monaco-preload';
 import { buildFilePath } from '@/lib/file-utils';
+
+// Lazy load Monaco Editor
+const MonacoEditor = lazy(() =>
+  import('@monaco-editor/react').then(module => ({ default: module.default }))
+);
+
+// Loading component for Monaco
+const MonacoLoading = () => (
+  <div className="flex-1 flex items-center justify-center bg-muted/20">
+    <div className="text-center space-y-3">
+      <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+      <p className="text-sm text-muted-foreground">Loading code editor...</p>
+    </div>
+  </div>
+);
 
 type CodeEditorProps = {
   onContentChange: (content: string) => void;
@@ -22,18 +37,12 @@ export function CodeEditor({ onContentChange }: CodeEditorProps) {
   const activeFile = files.find((f) => f.id === activeFileId);
   const openFiles = files.filter((f) => openFileIds.includes(f.id));
 
-  // Initialize file contents
+  // Preload Monaco when files are opened
   useEffect(() => {
-    const newContents: Record<string, string> = {};
-    openFiles.forEach((file) => {
-      if (!(file.id in fileContents)) {
-        newContents[file.id] = file.content || '';
-      }
-    });
-    if (Object.keys(newContents).length > 0) {
-      setFileContents((prev) => ({ ...prev, ...newContents }));
+    if (openFileIds.length > 0) {
+      preloadMonaco();
     }
-  }, [openFiles, fileContents]);
+  }, [openFileIds.length]);
 
   const handleContentChange = (fileId: string, content: string) => {
     setFileContents((prev) => ({ ...prev, [fileId]: content }));
@@ -169,21 +178,23 @@ export function CodeEditor({ onContentChange }: CodeEditorProps) {
       {/* Editor */}
       {activeFile && (
         <div className="flex-1 overflow-auto">
-          <Editor
-            height="100%"
-            language={activeFile.language || 'plaintext'}
-            value={fileContents[activeFile.id] || activeFile.content || ''}
-            onChange={(value) => handleContentChange(activeFile.id, value || '')}
-            theme="vs-dark"
-            options={{
-              minimap: { enabled: false },
-              fontSize: 14,
-              lineNumbers: 'on',
-              roundedSelection: false,
-              scrollBeyondLastLine: false,
-              automaticLayout: true,
-            }}
-          />
+          <Suspense fallback={<MonacoLoading />}>
+            <MonacoEditor
+              height="100%"
+              language={activeFile.language || 'plaintext'}
+              value={fileContents[activeFile.id] || activeFile.content || ''}
+              onChange={(value) => handleContentChange(activeFile.id, value || '')}
+              theme="vs-dark"
+              options={{
+                minimap: { enabled: false },
+                fontSize: 14,
+                lineNumbers: 'on',
+                roundedSelection: false,
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+              }}
+            />
+          </Suspense>
         </div>
       )}
     </div>

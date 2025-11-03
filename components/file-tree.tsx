@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { preloadMonaco } from '@/lib/monaco-preload';
 
 type FileTreeProps = {
   files: FileItem[];
@@ -103,6 +104,12 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
             isActive && 'bg-accent'
           )}
           style={{ paddingLeft: `${depth * 16 + 8}px` }}
+          onMouseEnter={() => {
+            // Preload Monaco when hovering over files
+            if (!isFolder) {
+              preloadMonaco();
+            }
+          }}
           onClick={() => {
             if (isFolder) {
               toggleFolder(file.id);
