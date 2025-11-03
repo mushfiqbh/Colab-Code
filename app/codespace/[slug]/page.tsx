@@ -1,0 +1,489 @@
+'use client';
+
+import { useEffect, useState, useCallback } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { getSupabase, FileItem } from '@/lib/supabase';
+import { useCodespaceStore } from '@/store/codespace-store';
+import { FileTree } from '@/components/file-tree';
+import { CodeEditor } from '@/components/code-editor';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
+  Plus,
+  Share2,
+  Loader2,
+  FileText,
+  File,
+  Folder,
+  RefreshCw,
+  ChevronDown
+} from 'lucide-react';
+import { buildFilePath, getFileLanguage, sortFiles } from '@/lib/file-utils';
+import { useToast } from '@/hooks/use-toast';
+import { Toaster } from '@/components/ui/toaster';
+
+export default function CodespacePage() {
+  const params = useParams();
+  const router = useRouter();
+  const { toast } = useToast();
+  const slug = params.slug as string;
+
+  const {
+    codespaceId,
+    name,
+    files,
+    activeFileId,
+    openFileIds,
+    setCodespace,
+    setFiles,
+    addFile,
+    updateFile,
+    deleteFile,
+    setActiveFile,
+    openFile,
+    closeFile,
+    updateCodespaceName,
+    expandFolder,
+  } = useCodespaceStore();
+
+  const [loading, setLoading] = useState(true);
+  const [editingName, setEditingName] = useState(false);
+  const [tempName, setTempName] = useState(name);
+  const [fileToDelete, setFileToDelete] = useState<FileItem | null>(null);
+  const [creatingItem, setCreatingItem] = useState<{ type: 'file' | 'folder'; parentId?: string; name?: string } | null>(null);
+
+  const loadCodespace = useCallback(async () => {
+    try {
+      setLoading(true);
+      const supabase = getSupabase();
+
+      if (!supabase) {
+        throw new Error('Supabase not initialized');
+      }
+
+      const { data: codespace, error: codespaceError } = await supabase
+        .from('codespaces')
+        .select('*')
+        .eq('slug', slug)
+        .maybeSingle();
+
+      if (codespaceError) throw codespaceError;
+
+      if (!codespace) {
+        router.push('/');
+        return;
+      }
+
+      setCodespace(codespace.id, codespace.slug, codespace.name);
+      setTempName(codespace.name);
+
+      const { data: filesData, error: filesError } = await supabase
+        .from('files')
+        .select('*')
+        .eq('codespace_id', codespace.id);
+
+      if (filesError) throw filesError;
+
+      setFiles(sortFiles(filesData || []));
+    } catch (error) {
+      console.error('Error loading codespace:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load codespace',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [slug, router, toast, setCodespace, setTempName, setFiles]);
+
+  useEffect(() => {
+    loadCodespace();
+  }, [slug, loadCodespace]);
+
+  const handleCreateItem = async (itemName: string, type: 'file' | 'folder', parentId?: string) => {
+    if (!codespaceId) return;
+
+    try {
+      const supabase = getSupabase();
+      if (!supabase) throw new Error('Supabase not initialized');
+
+      // Find the parent folder's path if parentId is provided
+      let parentPath = '/';
+      if (parentId) {
+        const parentFolder = files.find(f => f.id === parentId);
+        parentPath = parentFolder?.path || '/';
+      }
+
+      const path = buildFilePath(itemName, parentPath);
+      const language = type === 'file' ? getFileLanguage(itemName) : null;
+
+      const { data, error } = await supabase
+        .from('files')
+        .insert({
+          codespace_id: codespaceId,
+          name: itemName,
+          type,
+          parent_id: parentId || null,
+          content: type === 'file' ? '' : null,
+          language,
+          path,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      addFile(data);
+      setFiles(sortFiles([...files, data]));
+
+      // Expand the parent folder if it exists
+      if (parentId) {
+        expandFolder(parentId);
+      }
+
+      if (type === 'file') {
+        setActiveFile(data.id);
+      }
+
+      toast({
+        title: 'Success',
+        description: `${type === 'file' ? 'File' : 'Folder'} created successfully`,
+      });
+    } catch (error) {
+      console.error('Error creating item:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to create item',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleNewFile = () => {
+    setCreatingItem({ type: 'file' });
+  };
+
+  const handleNewFolder = () => {
+    setCreatingItem({ type: 'folder' });
+  };
+
+  const handleRefresh = async () => {
+    await loadCodespace();
+    toast({
+      title: 'Refreshed',
+      description: 'File tree has been refreshed',
+    });
+  };
+
+  const handleCollapseAll = () => {
+    useCodespaceStore.getState().collapseAllFolders();
+  };
+
+  const handleCreateNewItem = async (type: 'file' | 'folder', name: string, parentId?: string) => {
+    await handleCreateItem(name, type, parentId);
+    setCreatingItem(null);
+  };
+
+  const handleCancelCreating = () => {
+    setCreatingItem(null);
+  };
+
+  const handleCreateFileInFolder = (parentId: string) => {
+    expandFolder(parentId);
+    setCreatingItem({ type: 'file', parentId });
+  };
+
+  const handleCreateFolderInFolder = (parentId: string) => {
+    expandFolder(parentId);
+    setCreatingItem({ type: 'folder', parentId });
+  };
+
+  const handleRenameFile = async (file: FileItem) => {
+    try {
+      const supabase = getSupabase();
+      if (!supabase) throw new Error('Supabase not initialized');
+
+      const newPath = buildFilePath(file.name, file.path.replace(file.name.split('/').pop() || '', ''));
+      const newLanguage = file.type === 'file' ? getFileLanguage(file.name) : null;
+
+      const { error } = await supabase
+        .from('files')
+        .update({
+          name: file.name,
+          path: newPath,
+          language: newLanguage,
+        })
+        .eq('id', file.id);
+
+      if (error) throw error;
+
+      updateFile(file.id, {
+        name: file.name,
+        path: newPath,
+        language: newLanguage,
+      });
+
+      setFiles(sortFiles(files.map(f =>
+        f.id === file.id
+          ? { ...f, name: file.name, path: newPath, language: newLanguage }
+          : f
+      )));
+
+      toast({
+        title: 'Success',
+        description: 'File renamed successfully',
+      });
+    } catch (error) {
+      console.error('Error renaming file:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to rename file',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDeleteFile = (file: FileItem) => {
+    setFileToDelete(file);
+  };
+
+  const confirmDeleteFile = async () => {
+    if (!fileToDelete) return;
+
+    try {
+      const supabase = getSupabase();
+      if (!supabase) throw new Error('Supabase not initialized');
+
+      const { error } = await supabase
+        .from('files')
+        .delete()
+        .eq('id', fileToDelete.id);
+
+      if (error) throw error;
+
+      deleteFile(fileToDelete.id);
+      setFiles(sortFiles(files.filter(f => f.id !== fileToDelete.id && f.parent_id !== fileToDelete.id)));
+
+      toast({
+        title: 'Success',
+        description: `${fileToDelete.type === 'file' ? 'File' : 'Folder'} deleted`,
+      });
+    } catch (error) {
+      console.error('Error deleting file:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete item',
+        variant: 'destructive',
+      });
+    } finally {
+      setFileToDelete(null);
+    }
+  };
+
+  const handleContentChange = async (content: string) => {
+    if (!activeFileId) return;
+
+    try {
+      const supabase = getSupabase();
+      if (!supabase) throw new Error('Supabase not initialized');
+
+      const { error } = await supabase
+        .from('files')
+        .update({ content, updated_at: new Date().toISOString() })
+        .eq('id', activeFileId);
+
+      if (error) throw error;
+
+      updateFile(activeFileId, { content });
+    } catch (error) {
+      console.error('Error updating file:', error);
+    }
+  };
+
+  const handleUpdateName = async () => {
+    if (!codespaceId || !tempName.trim()) return;
+
+    try {
+      const supabase = getSupabase();
+      if (!supabase) throw new Error('Supabase not initialized');
+
+      const { error } = await supabase
+        .from('codespaces')
+        .update({ name: tempName, updated_at: new Date().toISOString() })
+        .eq('id', codespaceId);
+
+      if (error) throw error;
+
+      updateCodespaceName(tempName);
+      setEditingName(false);
+
+      toast({
+        title: 'Success',
+        description: 'Codespace name updated',
+      });
+    } catch (error) {
+      console.error('Error updating name:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update name',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleShare = () => {
+    const url = window.location.href;
+    navigator.clipboard.writeText(url);
+    toast({
+      title: 'Link copied!',
+      description: 'Share this link to let others view your code',
+    });
+  };
+
+  const activeFile = files.find((f) => f.id === activeFileId);
+
+  if (loading) {
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-screen flex flex-col">
+      <header className="border-b bg-background px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {editingName ? (
+              <Input
+                value={tempName}
+                onChange={(e) => setTempName(e.target.value)}
+                onBlur={handleUpdateName}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleUpdateName();
+                  if (e.key === 'Escape') {
+                    setTempName(name);
+                    setEditingName(false);
+                  }
+                }}
+                className="h-8 w-64"
+                autoFocus
+              />
+            ) : (
+              <h1
+                className="text-xl font-semibold cursor-pointer hover:text-primary transition-colors"
+                onClick={() => setEditingName(true)}
+              >
+                {name}
+              </h1>
+            )}
+          </div>
+
+          <Button onClick={handleShare} variant="outline" size="sm">
+            <Share2 className="h-4 w-4 mr-2" />
+            Share
+          </Button>
+        </div>
+      </header>
+
+      <div className="flex-1 flex overflow-hidden">
+        <aside className="w-64 border-r bg-muted/30 flex flex-col">
+          <div className="p-2 border-b bg-muted/50">
+            <div className="flex items-center gap-1">
+              <Button
+                onClick={handleNewFile}
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2"
+                title="New File"
+              >
+                <File className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                onClick={handleNewFolder}
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2"
+                title="New Folder"
+              >
+                <Folder className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                onClick={handleRefresh}
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2"
+                title="Refresh Explorer"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                onClick={handleCollapseAll}
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2"
+                title="Collapse All"
+              >
+                <ChevronDown className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-auto">
+            <FileTree
+              files={files}
+              onFileClick={(file) => openFile(file.id)}
+              onDeleteFile={handleDeleteFile}
+              onCreateFileInFolder={handleCreateFileInFolder}
+              onCreateFolderInFolder={handleCreateFolderInFolder}
+              onRenameFile={handleRenameFile}
+              onCreateNewItem={handleCreateNewItem}
+              creatingItem={creatingItem}
+              onCancelCreating={handleCancelCreating}
+            />
+          </div>
+        </aside>
+
+        <main className="flex-1 overflow-hidden bg-background">
+          <CodeEditor
+            onContentChange={handleContentChange}
+          />
+        </main>
+      </div>
+
+      <AlertDialog open={!!fileToDelete} onOpenChange={() => setFileToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {fileToDelete?.type}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete &quot;{fileToDelete?.name}&quot;?
+              {fileToDelete?.type === 'folder' && ' This will also delete all files and folders inside it.'}
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteFile} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Toaster />
+    </div>
+  );
+}
