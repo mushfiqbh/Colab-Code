@@ -60,7 +60,7 @@ Visit `http://localhost:3000` to see the application.
 
 ### Sharing
 
-- Each codespace has a unique URL: `/codespace/[slug]`
+- Each codespace has a unique URL: `/[slug]`
 - Click "Share" to copy the URL to clipboard
 - Anyone with the URL can view and edit the code
 

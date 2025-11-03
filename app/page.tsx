@@ -42,7 +42,7 @@ export default function Home() {
         description: 'Your codespace has been created',
       });
 
-      router.push(`/codespace/${slug}`);
+      router.push(`/${slug}`);
     } catch (error) {
       console.error('Error creating codespace:', error);
       toast({
