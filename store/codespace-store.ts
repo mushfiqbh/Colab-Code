@@ -9,6 +9,7 @@ type CodespaceStore = {
   activeFileId: string | null;
   openFileIds: string[];
   expandedFolders: Set<string>;
+  unsavedFileIds: Set<string>;
 
   setCodespace: (id: string, slug: string, name: string) => void;
   setFiles: (files: FileItem[]) => void;
@@ -17,6 +18,8 @@ type CodespaceStore = {
   deleteFile: (id: string) => void;
   lockFile: (id: string) => void;
   unlockFile: (id: string) => void;
+  markDirty: (id: string) => void;
+  clearDirty: (id: string) => void;
   setActiveFile: (id: string | null) => void;
   openFile: (id: string) => void;
   closeFile: (id: string) => void;
@@ -35,6 +38,7 @@ export const useCodespaceStore = create<CodespaceStore>((set) => ({
   activeFileId: null,
   openFileIds: [],
   expandedFolders: new Set(),
+  unsavedFileIds: new Set(),
 
   setCodespace: (id, slug, name) =>
     set({ codespaceId: id, slug, name }),
@@ -65,6 +69,20 @@ export const useCodespaceStore = create<CodespaceStore>((set) => ({
       ),
     })),
 
+  markDirty: (id) =>
+    set((state) => {
+      const s = new Set(state.unsavedFileIds);
+      s.add(id);
+      return { unsavedFileIds: s };
+    }),
+
+  clearDirty: (id) =>
+    set((state) => {
+      const s = new Set(state.unsavedFileIds);
+      s.delete(id);
+      return { unsavedFileIds: s };
+    }),
+
   deleteFile: (id) =>
     set((state) => {
       const newFiles = state.files.filter((f) => f.id !== id && f.parent_id !== id);
@@ -83,15 +101,28 @@ export const useCodespaceStore = create<CodespaceStore>((set) => ({
       };
     }),
 
-  setActiveFile: (id) => set({ activeFileId: id }),
+  setActiveFile: (id) =>
+    set((state) => {
+      // Prevent switching away if there are unsaved files (unless switching to same file)
+      if (id !== state.activeFileId && state.unsavedFileIds && state.unsavedFileIds.size > 0) {
+        return {} as any; // no-op
+      }
+      return { activeFileId: id };
+    }),
 
   openFile: (id) =>
-    set((state) => ({
-      openFileIds: state.openFileIds.includes(id)
-        ? state.openFileIds
-        : [...state.openFileIds, id],
-      activeFileId: id,
-    })),
+    set((state) => {
+      // Prevent switching to a new file if there are unsaved files
+      if (state.unsavedFileIds && state.unsavedFileIds.size > 0 && state.activeFileId !== id) {
+        return {} as any;
+      }
+      return {
+        openFileIds: state.openFileIds.includes(id)
+          ? state.openFileIds
+          : [...state.openFileIds, id],
+        activeFileId: id,
+      };
+    }),
 
   closeFile: (id) =>
     set((state) => {

@@ -387,6 +387,13 @@ export default function CodespacePage() {
       if (error) throw error;
 
       updateFile(activeFileId, { content });
+      // Clear dirty flag after successful save
+      try {
+        const { clearDirty } = useCodespaceStore.getState();
+        clearDirty(activeFileId);
+      } catch (e) {
+        // ignore if store not available
+      }
     } catch (error) {
       console.error('Error updating file:', error);
     }
@@ -674,6 +681,15 @@ export default function CodespacePage() {
             <FileTree
               files={files}
               onFileClick={(file) => {
+                const { unsavedFileIds } = useCodespaceStore.getState();
+                if (unsavedFileIds && unsavedFileIds.size > 0 && unsavedFileIds.has(activeFileId || '')) {
+                  // If there are unsaved files, warn and prevent switching
+                  toast({
+                    title: 'Save changes',
+                    description: 'Please save current changes before switching files',
+                  });
+                  return;
+                }
                 openFile(file.id);
                 setSidebarOpen(false); // Close sidebar on mobile after selecting file
               }}

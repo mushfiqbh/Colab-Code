@@ -30,9 +30,11 @@ type CodeEditorProps = {
 };
 
 export function CodeEditor({ onContentChange }: CodeEditorProps) {
-  const { files, activeFileId, openFileIds, setActiveFile, closeFile, name } = useCodespaceStore();
+  const { files, activeFileId, openFileIds, setActiveFile, closeFile, name, markDirty, clearDirty } = useCodespaceStore();
   const { toast } = useToast();
   const [fileContents, setFileContents] = useState<Record<string, string>>({});
+  // Track last active file to detect file switches
+  const lastActiveFileId = useRef<string | null>(null);
 
   const activeFile = files.find((f) => f.id === activeFileId);
   const openFiles = files.filter((f) => openFileIds.includes(f.id));
@@ -44,7 +46,28 @@ export function CodeEditor({ onContentChange }: CodeEditorProps) {
     }
   }, [openFileIds.length]);
 
+
+  // When switching files, ensure the editor value is initialized from the file's saved content.
+  // We overwrite the in-memory value on switch to avoid Monaco re-using previous model content
+  // (this prevents the bug where switching to a new file shows the previously locked file's content).
+  useEffect(() => {
+    if (activeFile && lastActiveFileId.current !== activeFile.id) {
+      setFileContents((prev) => ({ ...prev, [activeFile.id]: activeFile.content || '' }));
+      lastActiveFileId.current = activeFile.id;
+    }
+  }, [activeFile]);
+
+  // If lock state changes for the active file, re-initialize the editor content to the saved file content.
+  useEffect(() => {
+    if (activeFile) {
+      setFileContents((prev) => ({ ...prev, [activeFile.id]: activeFile.content || '' }));
+    }
+  }, [activeFile]);
+
   const handleContentChange = (fileId: string, content: string) => {
+    // If the active file is locked, prevent any changes from being applied or propagated
+    if (activeFile && activeFile.is_locked) return;
+
     setFileContents((prev) => ({ ...prev, [fileId]: content }));
     onContentChange(content);
   };
@@ -129,7 +152,17 @@ export function CodeEditor({ onContentChange }: CodeEditorProps) {
               className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 border-r cursor-pointer hover:bg-muted/50 transition-colors min-w-0 flex-shrink-0 ${
                 activeFileId === file.id ? 'bg-background border-b-2 border-b-primary' : ''
               }`}
-              onClick={() => setActiveFile(file.id)}
+              onClick={() => {
+                const { unsavedFileIds } = useCodespaceStore.getState();
+                if (unsavedFileIds && unsavedFileIds.size > 0 && activeFileId !== file.id) {
+                  toast({
+                    title: 'Save changes',
+                    description: 'Please save current changes before switching files',
+                  });
+                  return;
+                }
+                setActiveFile(file.id);
+              }}
             >
               <span className="text-xs sm:text-sm font-medium truncate max-w-20 sm:max-w-32">{file.name}</span>
               {file.is_locked && <Lock className="h-3 w-3 flex-shrink-0 text-orange-500" />}
@@ -181,10 +214,11 @@ export function CodeEditor({ onContentChange }: CodeEditorProps) {
         <div className="flex-1 overflow-auto">
           <Suspense fallback={<MonacoLoading />}>
             <MonacoEditor
+              key={activeFile.id}
+              path={activeFile.id}
               height="100%"
               language={activeFile.language || 'plaintext'}
-              value={fileContents[activeFile.id] || activeFile.content || ''}
-              onChange={(value) => handleContentChange(activeFile.id, value || '')}
+              // Do not pass a controlled `value` here; initialize the model in onMount instead.
               theme="vs-dark"
               options={{
                 minimap: { enabled: false },
@@ -194,6 +228,46 @@ export function CodeEditor({ onContentChange }: CodeEditorProps) {
                 scrollBeyondLastLine: false,
                 automaticLayout: true,
                 readOnly: activeFile.is_locked,
+              }}
+              beforeMount={(monaco: any) => {
+                try {
+                  // Clean up any stale models
+                  const uri = monaco.Uri.parse(activeFile.id);
+                  const existingModel = monaco.editor.getModel(uri);
+                  if (existingModel) existingModel.dispose();
+                } catch (e) {
+                  // ignore
+                }
+              }}
+              onMount={(editor: any, monaco: any) => {
+                const model = editor.getModel();
+                if (!model) return;
+
+                // Initialize the model value from our in-memory content or the file's saved content
+                const initial = fileContents[activeFile.id] ?? activeFile.content ?? '';
+                if (model.getValue() !== initial) {
+                  model.setValue(initial);
+                }
+
+                const disposable = editor.onDidChangeModelContent(() => {
+                  const newValue = model.getValue();
+
+                  // Prevent updates when locked
+                  if (activeFile.is_locked) return;
+
+                  // Update in-memory contents
+                  setFileContents((prev) => ({ ...prev, [activeFile.id]: newValue }));
+                  // Mark dirty if different from saved content, else clear dirty
+                  if (newValue !== (activeFile.content || '')) {
+                    markDirty(activeFile.id);
+                  } else {
+                    clearDirty(activeFile.id);
+                  }
+                  onContentChange(newValue);
+                });
+
+                // Ensure we clean up the listener when the editor is disposed
+                editor.onDidDispose(() => disposable.dispose());
               }}
             />
           </Suspense>

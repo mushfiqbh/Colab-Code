@@ -1,14 +1,20 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { nanoid } from 'nanoid';
-import { getSupabase } from '@/lib/supabase';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Code2, Loader2, Zap, Share2, Lock } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { Toaster } from '@/components/ui/toaster';
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { nanoid } from "nanoid";
+import { getSupabase } from "@/lib/supabase";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Code2, Loader2, Zap, Share2, Lock } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Toaster } from "@/components/ui/toaster";
 
 export default function Home() {
   const router = useRouter();
@@ -21,16 +27,16 @@ export default function Home() {
       const supabase = getSupabase();
 
       if (!supabase) {
-        throw new Error('Supabase not initialized');
+        throw new Error("Supabase not initialized");
       }
 
       const slug = nanoid(10);
 
       const { data, error } = await supabase
-        .from('codespaces')
+        .from("codespaces")
         .insert({
           slug,
-          name: 'Untitled Codespace',
+          name: "Untitled Codespace",
         })
         .select()
         .single();
@@ -38,17 +44,17 @@ export default function Home() {
       if (error) throw error;
 
       toast({
-        title: 'Success!',
-        description: 'Your codespace has been created',
+        title: "Success!",
+        description: "Your codespace has been created",
       });
 
       router.push(`/${slug}`);
     } catch (error) {
-      console.error('Error creating codespace:', error);
+      console.error("Error creating codespace:", error);
       toast({
-        title: 'Error',
-        description: 'Failed to create codespace. Please try again.',
-        variant: 'destructive',
+        title: "Error",
+        description: "Failed to create codespace. Please try again.",
+        variant: "destructive",
       });
     } finally {
       setCreating(false);
@@ -68,8 +74,8 @@ export default function Home() {
           </h1>
 
           <p className="text-base sm:text-lg lg:text-xl text-muted-foreground max-w-2xl mx-auto px-4">
-            Create, edit, and share code snippets without any login. Perfect for collaboration,
-            code reviews, and quick sharing.
+            Create, edit, and share code snippets without any login. Perfect for
+            collaboration, code reviews, and quick sharing.
           </p>
 
           <div className="pt-4 sm:pt-6">
@@ -100,9 +106,12 @@ export default function Home() {
               <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
                 <Zap className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
               </div>
-              <CardTitle className="text-lg sm:text-xl">Instant Setup</CardTitle>
+              <CardTitle className="text-lg sm:text-xl">
+                Instant Setup
+              </CardTitle>
               <CardDescription className="text-sm sm:text-base">
-                No registration required. Start coding immediately with a single click.
+                No registration required. Start coding immediately with a single
+                click.
               </CardDescription>
             </CardHeader>
           </Card>
@@ -114,7 +123,8 @@ export default function Home() {
               </div>
               <CardTitle className="text-lg sm:text-xl">Easy Sharing</CardTitle>
               <CardDescription className="text-sm sm:text-base">
-                Share your code with a unique URL. Perfect for collaboration and code reviews.
+                Share your code with a unique URL. Perfect for collaboration and
+                code reviews.
               </CardDescription>
             </CardHeader>
           </Card>
@@ -124,21 +134,21 @@ export default function Home() {
               <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
                 <Lock className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
               </div>
-              <CardTitle className="text-lg sm:text-xl">Organize Files</CardTitle>
+              <CardTitle className="text-lg sm:text-xl">
+                Organize Files
+              </CardTitle>
               <CardDescription className="text-sm sm:text-base">
-                Create folders and multiple files. Organize your code just like a real project.
+                Create folders and multiple files. Organize your code just like
+                a real project.
               </CardDescription>
             </CardHeader>
           </Card>
         </div>
 
-        <div className="mt-12 sm:mt-16 text-center text-xs sm:text-sm text-muted-foreground">
-          <p>
-            Built with Next.js, Supabase, and Zustand
-          </p>
-        </div>
+        <p className="mt-10 text-boldgit  text-muted-foreground text-center">
+          © {new Date().getFullYear()} Mushfiq R. — Free to use
+        </p>
       </div>
-
       <Toaster />
     </div>
   );
