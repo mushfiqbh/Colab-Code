@@ -15,6 +15,8 @@ type CodespaceStore = {
   addFile: (file: FileItem) => void;
   updateFile: (id: string, updates: Partial<FileItem>) => void;
   deleteFile: (id: string) => void;
+  lockFile: (id: string) => void;
+  unlockFile: (id: string) => void;
   setActiveFile: (id: string | null) => void;
   openFile: (id: string) => void;
   closeFile: (id: string) => void;
@@ -46,6 +48,20 @@ export const useCodespaceStore = create<CodespaceStore>((set) => ({
     set((state) => ({
       files: state.files.map((f) =>
         f.id === id ? { ...f, ...updates } : f
+      ),
+    })),
+
+  lockFile: (id) =>
+    set((state) => ({
+      files: state.files.map((f) =>
+        f.id === id ? { ...f, is_locked: true } : f
+      ),
+    })),
+
+  unlockFile: (id) =>
+    set((state) => ({
+      files: state.files.map((f) =>
+        f.id === id ? { ...f, is_locked: false } : f
       ),
     })),
 

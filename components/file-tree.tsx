@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { FileItem } from '@/lib/supabase';
 import { useCodespaceStore } from '@/store/codespace-store';
-import { ChevronRight, ChevronDown, File, Folder, FolderOpen, Plus, FileText, MoreVertical, Edit, Trash2 } from 'lucide-react';
+import { ChevronRight, ChevronDown, File, Folder, FolderOpen, Plus, FileText, MoreVertical, Edit, Trash2, Lock, Unlock } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,11 +21,13 @@ type FileTreeProps = {
   onCreateFolderInFolder?: (parentId: string) => void;
   onRenameFile?: (file: FileItem) => void;
   onCreateNewItem?: (type: 'file' | 'folder', name: string, parentId?: string) => void;
+  onLockFile?: (file: FileItem) => void;
+  onUnlockFile?: (file: FileItem) => void;
   creatingItem?: { type: 'file' | 'folder'; parentId?: string } | null;
   onCancelCreating?: () => void;
 };
 
-export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolder, onCreateFolderInFolder, onRenameFile, onCreateNewItem, creatingItem, onCancelCreating }: FileTreeProps) {
+export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolder, onCreateFolderInFolder, onRenameFile, onCreateNewItem, onLockFile, onUnlockFile, creatingItem, onCancelCreating }: FileTreeProps) {
   const { activeFileId, expandedFolders, toggleFolder } = useCodespaceStore();
   const [editingFileId, setEditingFileId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
@@ -150,7 +152,12 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
               autoFocus
             />
           ) : (
-            <span className="flex-1 text-sm truncate">{file.name}</span>
+            <div className="flex-1 flex items-center gap-1 min-w-0">
+              <span className="text-sm truncate">{file.name}</span>
+              {file.is_locked && !isFolder && (
+                <Lock className="h-3 w-3 flex-shrink-0 text-orange-500" />
+              )}
+            </div>
           )}
 
           <DropdownMenu>
@@ -192,6 +199,31 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
                     <Plus className="h-4 w-4 mr-2" />
                     New Folder
                   </DropdownMenuItem>
+                </>
+              )}
+              {!isFolder && (
+                <>
+                  {file.is_locked ? (
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onUnlockFile?.(file);
+                      }}
+                    >
+                      <Unlock className="h-4 w-4 mr-2" />
+                      Unlock
+                    </DropdownMenuItem>
+                  ) : (
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onLockFile?.(file);
+                      }}
+                    >
+                      <Lock className="h-4 w-4 mr-2" />
+                      Lock
+                    </DropdownMenuItem>
+                  )}
                 </>
               )}
               <DropdownMenuItem

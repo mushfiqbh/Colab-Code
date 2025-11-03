@@ -4,7 +4,7 @@ import { FileItem } from '@/lib/supabase';
 import { useCodespaceStore } from '@/store/codespace-store';
 import { useEffect, useState, useRef, Suspense, lazy } from 'react';
 import { Button } from '@/components/ui/button';
-import { X, Copy, Download, Loader2 } from 'lucide-react';
+import { X, Copy, Download, Loader2, Lock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import JSZip from 'jszip';
 import { preloadMonaco } from '@/lib/monaco-preload';
@@ -132,6 +132,7 @@ export function CodeEditor({ onContentChange }: CodeEditorProps) {
               onClick={() => setActiveFile(file.id)}
             >
               <span className="text-xs sm:text-sm font-medium truncate max-w-20 sm:max-w-32">{file.name}</span>
+              {file.is_locked && <Lock className="h-3 w-3 flex-shrink-0 text-orange-500" />}
               {file.language && (
                 <span className="hidden sm:inline text-xs text-muted-foreground px-1.5 py-0.5 bg-muted rounded">
                   {file.language}
@@ -164,7 +165,7 @@ export function CodeEditor({ onContentChange }: CodeEditorProps) {
             </div>
           ))}
         </div>
-        <Button
+        {/* <Button
           variant="ghost"
           size="sm"
           className="px-2 sm:px-3 py-2 hover:bg-muted/50 min-w-[44px] min-h-[44px] flex-shrink-0"
@@ -172,7 +173,7 @@ export function CodeEditor({ onContentChange }: CodeEditorProps) {
           title="Download all files as ZIP"
         >
           <Download className="h-4 w-4" />
-        </Button>
+        </Button> */}
       </div>
 
       {/* Editor */}
@@ -192,6 +193,7 @@ export function CodeEditor({ onContentChange }: CodeEditorProps) {
                 roundedSelection: false,
                 scrollBeyondLastLine: false,
                 automaticLayout: true,
+                readOnly: activeFile.is_locked,
               }}
             />
           </Suspense>

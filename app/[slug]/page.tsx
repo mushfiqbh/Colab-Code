@@ -52,6 +52,8 @@ export default function CodespacePage() {
     addFile,
     updateFile,
     deleteFile,
+    lockFile,
+    unlockFile,
     setActiveFile,
     openFile,
     closeFile,
@@ -62,6 +64,9 @@ export default function CodespacePage() {
   const [loading, setLoading] = useState(true);
   const [editingName, setEditingName] = useState(false);
   const [tempName, setTempName] = useState(name);
+  const [editingSlug, setEditingSlug] = useState(false);
+  const [tempSlug, setTempSlug] = useState(slug);
+  const [checkingSlug, setCheckingSlug] = useState(false);
   const [fileToDelete, setFileToDelete] = useState<FileItem | null>(null);
   const [creatingItem, setCreatingItem] = useState<{ type: 'file' | 'folder'; parentId?: string; name?: string } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -309,6 +314,64 @@ export default function CodespacePage() {
     }
   };
 
+  const handleLockFile = async (file: FileItem) => {
+    try {
+      const supabase = getSupabase();
+      if (!supabase) throw new Error('Supabase not initialized');
+
+      const { error } = await supabase
+        .from('files')
+        .update({ is_locked: true })
+        .eq('id', file.id);
+
+      if (error) throw error;
+
+      lockFile(file.id);
+      updateFile(file.id, { is_locked: true });
+
+      toast({
+        title: 'File Locked',
+        description: `${file.name} is now locked and cannot be edited`,
+      });
+    } catch (error) {
+      console.error('Error locking file:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to lock file',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleUnlockFile = async (file: FileItem) => {
+    try {
+      const supabase = getSupabase();
+      if (!supabase) throw new Error('Supabase not initialized');
+
+      const { error } = await supabase
+        .from('files')
+        .update({ is_locked: false })
+        .eq('id', file.id);
+
+      if (error) throw error;
+
+      unlockFile(file.id);
+      updateFile(file.id, { is_locked: false });
+
+      toast({
+        title: 'File Unlocked',
+        description: `${file.name} is now unlocked and can be edited`,
+      });
+    } catch (error) {
+      console.error('Error unlocking file:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to unlock file',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleContentChange = async (content: string) => {
     if (!activeFileId) return;
 
@@ -369,6 +432,95 @@ export default function CodespacePage() {
     });
   };
 
+  const checkSlugAvailability = async (newSlug: string): Promise<boolean> => {
+    if (!newSlug.trim() || newSlug === slug) return true;
+
+    try {
+      const supabase = getSupabase();
+      if (!supabase) return false;
+
+      const { data, error } = await supabase
+        .from('codespaces')
+        .select('id')
+        .eq('slug', newSlug.trim())
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error checking slug availability:', error);
+        return false;
+      }
+
+      return !data; // Available if no data found
+    } catch (error) {
+      console.error('Error checking slug availability:', error);
+      return false;
+    }
+  };
+
+  const handleUpdateSlug = async () => {
+    const newSlug = tempSlug.trim();
+
+    if (!newSlug) {
+      toast({
+        title: 'Invalid slug',
+        description: 'Slug cannot be empty',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (newSlug === slug) {
+      setEditingSlug(false);
+      return;
+    }
+
+    setCheckingSlug(true);
+    const isAvailable = await checkSlugAvailability(newSlug);
+    setCheckingSlug(false);
+
+    if (!isAvailable) {
+      toast({
+        title: 'Slug not available',
+        description: 'This slug is already taken. Please choose another one.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      const supabase = getSupabase();
+      if (!supabase) throw new Error('Supabase not initialized');
+
+      const { error } = await supabase
+        .from('codespaces')
+        .update({ slug: newSlug, updated_at: new Date().toISOString() })
+        .eq('id', codespaceId);
+
+      if (error) throw error;
+
+      // Update the store
+      const store = useCodespaceStore.getState();
+      store.setCodespace(codespaceId!, newSlug, store.name);
+
+      // Redirect to new URL
+      router.push(`/${newSlug}`);
+
+      toast({
+        title: 'Slug updated!',
+        description: 'Your codespace URL has been updated.',
+      });
+    } catch (error) {
+      console.error('Error updating slug:', error);
+      toast({
+        title: 'Error updating slug',
+        description: 'Failed to update the slug. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setEditingSlug(false);
+    }
+  };
+
   const activeFile = files.find((f) => f.id === activeFileId);
 
   if (loading) {
@@ -419,6 +571,41 @@ export default function CodespacePage() {
             )}
           </div>
 
+          {/* Slug editing */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">/</span>
+                      {editingSlug ? (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={tempSlug}
+                            onChange={(e) => setTempSlug(e.target.value)}
+                            onBlur={handleUpdateSlug}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleUpdateSlug();
+                              if (e.key === 'Escape') {
+                                setTempSlug(slug);
+                                setEditingSlug(false);
+                              }
+                            }}
+                            className="h-8 w-24 sm:w-32 text-sm"
+                            autoFocus
+                            disabled={checkingSlug}
+                          />
+                          {checkingSlug && <Loader2 className="h-4 w-4 animate-spin" />}
+                        </div>
+                      ) : (
+                        <span
+                          className="text-sm text-muted-foreground cursor-pointer hover:text-primary transition-colors"
+                          onClick={() => {
+                            setTempSlug(slug);
+                            setEditingSlug(true);
+                          }}
+                        >
+                          {slug}
+                        </span>
+                      )}
+                    </div>
+
           <Button onClick={handleShare} variant="outline" size="sm" className="hidden sm:flex">
             <Share2 className="h-4 w-4 mr-2" />
             Share
@@ -430,16 +617,17 @@ export default function CodespacePage() {
         {/* Mobile overlay */}
         {sidebarOpen && (
           <div
-            className="fixed inset-0 bg-white z-40 md:hidden"
+            className="fixed inset-0 z-40 md:hidden"
             onClick={() => setSidebarOpen(false)}
           />
         )}
 
         <aside className={`
-          w-64 border-r bg-muted/30 flex flex-col
-          fixed md:relative inset-y-0 left-0 z-50 md:z-auto
-          transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0
+          w-full md:w-64 border-t md:border-t-0 md:border-r bg-white flex flex-col
+          fixed md:relative bottom-0 md:bottom-auto md:inset-y-0 left-0 md:left-auto z-50 md:z-auto
+          transform ${sidebarOpen ? 'translate-y-0' : 'translate-y-full'} md:translate-y-0
           transition-transform duration-200 ease-in-out
+          h-80 md:h-auto shadow-lg md:shadow-none
         `}>
           <div className="p-2 border-b bg-muted/50">
             <div className="flex items-center gap-1 flex-wrap">
@@ -494,6 +682,8 @@ export default function CodespacePage() {
               onCreateFolderInFolder={handleCreateFolderInFolder}
               onRenameFile={handleRenameFile}
               onCreateNewItem={handleCreateNewItem}
+              onLockFile={handleLockFile}
+              onUnlockFile={handleUnlockFile}
               creatingItem={creatingItem}
               onCancelCreating={handleCancelCreating}
             />

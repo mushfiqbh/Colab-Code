@@ -41,6 +41,7 @@ export type FileItem = {
   content: string | null;
   language: string | null;
   path: string;
+  is_locked: boolean;
   created_at: string;
   updated_at: string;
 };
