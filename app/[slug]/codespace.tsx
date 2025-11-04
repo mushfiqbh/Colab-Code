@@ -1,14 +1,26 @@
-'use client';
+"use client";
 
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import Image from 'next/image';
-import { getSupabase, FileItem } from '@/lib/supabase';
-import { useCodespaceStore } from '@/store/codespace-store';
-import { FileTree } from '@/components/file-tree';
-import { CodeEditor } from '@/components/code-editor';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useEffect, useState, useCallback, useRef } from "react";
+import { useParams, useRouter } from "next/navigation";
+import Image from "next/image";
+
+// Helper function for debouncing
+function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout;
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+}
+import { getSupabase, FileItem } from "@/lib/supabase";
+import { useCodespaceStore } from "@/store/codespace-store";
+import { FileTree } from "@/components/file-tree";
+import { CodeEditor } from "@/components/code-editor";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,19 +31,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+} from "@/components/ui/dropdown-menu";
 import {
   Plus,
   Share2,
@@ -45,11 +57,11 @@ import {
   X,
   Download,
   Eye,
-  Users
-} from 'lucide-react';
-import { buildFilePath, getFileLanguage, sortFiles } from '@/lib/file-utils';
-import { useToast } from '@/hooks/use-toast';
-import { Toaster } from '@/components/ui/toaster';
+  Check,
+} from "lucide-react";
+import { buildFilePath, getFileLanguage, sortFiles } from "@/lib/file-utils";
+import { useToast } from "@/hooks/use-toast";
+import { Toaster } from "@/components/ui/toaster";
 
 export default function Codespace() {
   const params = useParams();
@@ -61,7 +73,6 @@ export default function Codespace() {
     codespaceId,
     name,
     visitorCount,
-    onlineCount,
     files,
     activeFileId,
     openFileIds,
@@ -77,7 +88,6 @@ export default function Codespace() {
     closeFile,
     updateCodespaceName,
     incrementVisitorCount,
-    setOnlineCount,
     expandFolder,
   } = useCodespaceStore();
 
@@ -87,13 +97,19 @@ export default function Codespace() {
   const [editingSlug, setEditingSlug] = useState(false);
   const [tempSlug, setTempSlug] = useState(slug);
   const [checkingSlug, setCheckingSlug] = useState(false);
+  const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
   const [fileToDelete, setFileToDelete] = useState<FileItem | null>(null);
-  const [creatingItem, setCreatingItem] = useState<{ type: 'file' | 'folder'; parentId?: string; name?: string } | null>(null);
+  const [creatingItem, setCreatingItem] = useState<{
+    type: "file" | "folder";
+    parentId?: string;
+    name?: string;
+  } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [uploadParentId, setUploadParentId] = useState<string | undefined>(undefined);
+  const [uploadParentId, setUploadParentId] = useState<string | undefined>(
+    undefined
+  );
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState<FileItem | null>(null);
-  const [userId] = useState(() => `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -103,53 +119,70 @@ export default function Codespace() {
       const supabase = getSupabase();
 
       if (!supabase) {
-        throw new Error('Supabase not initialized');
+        throw new Error("Supabase not initialized");
       }
 
       const { data: codespace, error: codespaceError } = await supabase
-        .from('codespaces')
-        .select('*')
-        .eq('slug', slug)
+        .from("codespaces")
+        .select("*")
+        .ilike("slug", slug)
         .maybeSingle();
 
       if (codespaceError) throw codespaceError;
 
       if (!codespace) {
-        router.push('/');
+        router.push("/");
         return;
       }
 
-      setCodespace(codespace.id, codespace.slug, codespace.name, codespace.visitor_count || 0);
+      setCodespace(
+        codespace.id,
+        codespace.slug,
+        codespace.name,
+        codespace.visitor_count || 0
+      );
       setTempName(codespace.name);
 
-      // Increment visitor count
-      const { error: updateError } = await supabase
-        .from('codespaces')
-        .update({ visitor_count: (codespace.visitor_count || 0) + 1 })
-        .eq('id', codespace.id);
+      // Increment visitor count using session storage (only once per session)
+      const sessionKey = `visited_codespace_${codespace.id}`;
+      const hasVisited =
+        typeof window !== "undefined"
+          ? sessionStorage.getItem(sessionKey)
+          : null;
 
-      if (updateError) {
-        console.error('Error updating visitor count:', updateError);
-      } else {
-        // Update local state
-        const store = useCodespaceStore.getState();
-        store.incrementVisitorCount();
+      if (!hasVisited) {
+        const { error: updateError } = await supabase
+          .from("codespaces")
+          .update({ visitor_count: (codespace.visitor_count || 0) + 1 })
+          .eq("id", codespace.id);
+
+        if (updateError) {
+          console.error("Error updating visitor count:", updateError);
+        } else {
+          // Update local state
+          const store = useCodespaceStore.getState();
+          store.incrementVisitorCount();
+          // Mark as visited in session storage (only on client side)
+          if (typeof window !== "undefined") {
+            sessionStorage.setItem(sessionKey, "true");
+          }
+        }
       }
 
       const { data: filesData, error: filesError } = await supabase
-        .from('files')
-        .select('*')
-        .eq('codespace_id', codespace.id);
+        .from("files")
+        .select("*")
+        .eq("codespace_id", codespace.id);
 
       if (filesError) throw filesError;
 
       setFiles(sortFiles(filesData || []));
     } catch (error) {
-      console.error('Error loading codespace:', error);
+      console.error("Error loading codespace:", error);
       toast({
-        title: 'Error',
-        description: 'Failed to load codespace',
-        variant: 'destructive',
+        title: "Error",
+        description: "Failed to load codespace",
+        variant: "destructive",
       });
     } finally {
       setLoading(false);
@@ -162,145 +195,45 @@ export default function Codespace() {
 
   // Auto-open sidebar on mobile when no file is active
   useEffect(() => {
-    if (!loading && typeof window !== 'undefined') {
+    if (!loading && typeof window !== "undefined") {
       const isMobile = window.innerWidth < 768; // md breakpoint
       const hasActiveFile = !!activeFileId;
-      
+
       if (isMobile && !hasActiveFile && files.length > 0) {
         setSidebarOpen(true);
       }
     }
   }, [loading, activeFileId, files.length]);
 
-  // Online user tracking
-  useEffect(() => {
-    if (!codespaceId) return;
-
-    const supabase = getSupabase();
-    if (!supabase) return;
-
-    let heartbeatInterval: NodeJS.Timeout;
-    let cleanupInterval: NodeJS.Timeout;
-
-    const joinPresence = async () => {
-      try {
-        // Add user to online_users table
-        const { error } = await supabase
-          .from('online_users')
-          .upsert({
-            codespace_id: codespaceId,
-            user_id: userId,
-            last_seen: new Date().toISOString(),
-          });
-
-        if (error) {
-          console.error('Error joining presence:', error);
-          return;
-        }
-
-        // Start heartbeat to keep user online
-        heartbeatInterval = setInterval(async () => {
-          await supabase
-            .from('online_users')
-            .update({ last_seen: new Date().toISOString() })
-            .eq('codespace_id', codespaceId)
-            .eq('user_id', userId);
-        }, 30000); // Update every 30 seconds
-
-        // Clean up inactive users periodically
-        cleanupInterval = setInterval(async () => {
-          await supabase
-            .from('online_users')
-            .delete()
-            .eq('codespace_id', codespaceId)
-            .lt('last_seen', new Date(Date.now() - 120000).toISOString()); // Remove users inactive for 2 minutes
-        }, 60000); // Clean up every minute
-
-        // Subscribe to real-time changes
-        const channel = supabase
-          .channel(`online_users_${codespaceId}`)
-          .on(
-            'postgres_changes',
-            {
-              event: '*',
-              schema: 'public',
-              table: 'online_users',
-              filter: `codespace_id=eq.${codespaceId}`,
-            },
-            async () => {
-              // Count current online users (active within last 60 seconds)
-              const { count, error } = await supabase
-                .from('online_users')
-                .select('*', { count: 'exact', head: true })
-                .eq('codespace_id', codespaceId)
-                .gte('last_seen', new Date(Date.now() - 60000).toISOString());
-
-              if (!error && count !== null) {
-                setOnlineCount(count);
-              }
-            }
-          )
-          .subscribe();
-
-        return () => {
-          channel.unsubscribe();
-        };
-      } catch (error) {
-        console.error('Error setting up presence:', error);
-      }
-    };
-
-    const leavePresence = async () => {
-      try {
-        await supabase
-          .from('online_users')
-          .delete()
-          .eq('codespace_id', codespaceId)
-          .eq('user_id', userId);
-      } catch (error) {
-        console.error('Error leaving presence:', error);
-      }
-    };
-
-    joinPresence();
-
-    // Cleanup on unmount
-    return () => {
-      if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-      }
-      if (cleanupInterval) {
-        clearInterval(cleanupInterval);
-      }
-      leavePresence();
-    };
-  }, [codespaceId, userId, setOnlineCount]);
-
-  const handleCreateItem = async (itemName: string, type: 'file' | 'folder', parentId?: string) => {
+  const handleCreateItem = async (
+    itemName: string,
+    type: "file" | "folder",
+    parentId?: string
+  ) => {
     if (!codespaceId) return;
 
     try {
       const supabase = getSupabase();
-      if (!supabase) throw new Error('Supabase not initialized');
+      if (!supabase) throw new Error("Supabase not initialized");
 
       // Find the parent folder's path if parentId is provided
-      let parentPath = '/';
+      let parentPath = "/";
       if (parentId) {
-        const parentFolder = files.find(f => f.id === parentId);
-        parentPath = parentFolder?.path || '/';
+        const parentFolder = files.find((f) => f.id === parentId);
+        parentPath = parentFolder?.path || "/";
       }
 
       const path = buildFilePath(itemName, parentPath);
-      const language = type === 'file' ? getFileLanguage(itemName) : null;
+      const language = type === "file" ? getFileLanguage(itemName) : null;
 
       const { data, error } = await supabase
-        .from('files')
+        .from("files")
         .insert({
           codespace_id: codespaceId,
           name: itemName,
           type,
           parent_id: parentId || null,
-          content: type === 'file' ? '' : null,
+          content: type === "file" ? "" : null,
           language,
           path,
         })
@@ -317,42 +250,46 @@ export default function Codespace() {
         expandFolder(parentId);
       }
 
-      if (type === 'file') {
+      if (type === "file") {
         setActiveFile(data.id);
       }
 
       toast({
-        title: 'Success',
-        description: `${type === 'file' ? 'File' : 'Folder'} created successfully`,
+        title: "Success",
+        description: `${
+          type === "file" ? "File" : "Folder"
+        } created successfully`,
       });
     } catch (error) {
-      console.error('Error creating item:', error);
+      console.error("Error creating item:", error);
       toast({
-        title: 'Error',
-        description: 'Failed to create item',
-        variant: 'destructive',
+        title: "Error",
+        description: "Failed to create item",
+        variant: "destructive",
       });
     }
   };
 
   const isImageFile = (file: FileItem) => {
-    return file.content?.startsWith('data:image/') || 
-           file.name.match(/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i);
+    return (
+      file.content?.startsWith("data:image/") ||
+      file.name.match(/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i)
+    );
   };
 
   const handleNewFile = () => {
-    setCreatingItem({ type: 'file' });
+    setCreatingItem({ type: "file" });
   };
 
   const handleNewFolder = () => {
-    setCreatingItem({ type: 'folder' });
+    setCreatingItem({ type: "folder" });
   };
 
   const handleRefresh = async () => {
     await loadCodespace();
     toast({
-      title: 'Refreshed',
-      description: 'File tree has been refreshed',
+      title: "Refreshed",
+      description: "File tree has been refreshed",
     });
   };
 
@@ -360,7 +297,11 @@ export default function Codespace() {
     useCodespaceStore.getState().collapseAllFolders();
   };
 
-  const handleCreateNewItem = async (type: 'file' | 'folder', name: string, parentId?: string) => {
+  const handleCreateNewItem = async (
+    type: "file" | "folder",
+    name: string,
+    parentId?: string
+  ) => {
     await handleCreateItem(name, type, parentId);
     setCreatingItem(null);
   };
@@ -371,30 +312,34 @@ export default function Codespace() {
 
   const handleCreateFileInFolder = (parentId: string) => {
     expandFolder(parentId);
-    setCreatingItem({ type: 'file', parentId });
+    setCreatingItem({ type: "file", parentId });
   };
 
   const handleCreateFolderInFolder = (parentId: string) => {
     expandFolder(parentId);
-    setCreatingItem({ type: 'folder', parentId });
+    setCreatingItem({ type: "folder", parentId });
   };
 
   const handleRenameFile = async (file: FileItem) => {
     try {
       const supabase = getSupabase();
-      if (!supabase) throw new Error('Supabase not initialized');
+      if (!supabase) throw new Error("Supabase not initialized");
 
-      const newPath = buildFilePath(file.name, file.path.replace(file.name.split('/').pop() || '', ''));
-      const newLanguage = file.type === 'file' ? getFileLanguage(file.name) : null;
+      const newPath = buildFilePath(
+        file.name,
+        file.path.replace(file.name.split("/").pop() || "", "")
+      );
+      const newLanguage =
+        file.type === "file" ? getFileLanguage(file.name) : null;
 
       const { error } = await supabase
-        .from('files')
+        .from("files")
         .update({
           name: file.name,
           path: newPath,
           language: newLanguage,
         })
-        .eq('id', file.id);
+        .eq("id", file.id);
 
       if (error) throw error;
 
@@ -404,22 +349,26 @@ export default function Codespace() {
         language: newLanguage,
       });
 
-      setFiles(sortFiles(files.map(f =>
-        f.id === file.id
-          ? { ...f, name: file.name, path: newPath, language: newLanguage }
-          : f
-      )));
+      setFiles(
+        sortFiles(
+          files.map((f) =>
+            f.id === file.id
+              ? { ...f, name: file.name, path: newPath, language: newLanguage }
+              : f
+          )
+        )
+      );
 
       toast({
-        title: 'Success',
-        description: 'File renamed successfully',
+        title: "Success",
+        description: "File renamed successfully",
       });
     } catch (error) {
-      console.error('Error renaming file:', error);
+      console.error("Error renaming file:", error);
       toast({
-        title: 'Error',
-        description: 'Failed to rename file',
-        variant: 'destructive',
+        title: "Error",
+        description: "Failed to rename file",
+        variant: "destructive",
       });
     }
   };
@@ -433,28 +382,36 @@ export default function Codespace() {
 
     try {
       const supabase = getSupabase();
-      if (!supabase) throw new Error('Supabase not initialized');
+      if (!supabase) throw new Error("Supabase not initialized");
 
       const { error } = await supabase
-        .from('files')
+        .from("files")
         .delete()
-        .eq('id', fileToDelete.id);
+        .eq("id", fileToDelete.id);
 
       if (error) throw error;
 
       deleteFile(fileToDelete.id);
-      setFiles(sortFiles(files.filter(f => f.id !== fileToDelete.id && f.parent_id !== fileToDelete.id)));
+      setFiles(
+        sortFiles(
+          files.filter(
+            (f) => f.id !== fileToDelete.id && f.parent_id !== fileToDelete.id
+          )
+        )
+      );
 
       toast({
-        title: 'Success',
-        description: `${fileToDelete.type === 'file' ? 'File' : 'Folder'} deleted`,
+        title: "Success",
+        description: `${
+          fileToDelete.type === "file" ? "File" : "Folder"
+        } deleted`,
       });
     } catch (error) {
-      console.error('Error deleting file:', error);
+      console.error("Error deleting file:", error);
       toast({
-        title: 'Error',
-        description: 'Failed to delete item',
-        variant: 'destructive',
+        title: "Error",
+        description: "Failed to delete item",
+        variant: "destructive",
       });
     } finally {
       setFileToDelete(null);
@@ -464,12 +421,12 @@ export default function Codespace() {
   const handleLockFile = async (file: FileItem) => {
     try {
       const supabase = getSupabase();
-      if (!supabase) throw new Error('Supabase not initialized');
+      if (!supabase) throw new Error("Supabase not initialized");
 
       const { error } = await supabase
-        .from('files')
+        .from("files")
         .update({ is_locked: true })
-        .eq('id', file.id);
+        .eq("id", file.id);
 
       if (error) throw error;
 
@@ -477,15 +434,15 @@ export default function Codespace() {
       updateFile(file.id, { is_locked: true });
 
       toast({
-        title: 'File Locked',
+        title: "File Locked",
         description: `${file.name} is now locked and cannot be edited`,
       });
     } catch (error) {
-      console.error('Error locking file:', error);
+      console.error("Error locking file:", error);
       toast({
-        title: 'Error',
-        description: 'Failed to lock file',
-        variant: 'destructive',
+        title: "Error",
+        description: "Failed to lock file",
+        variant: "destructive",
       });
     }
   };
@@ -493,12 +450,12 @@ export default function Codespace() {
   const handleUnlockFile = async (file: FileItem) => {
     try {
       const supabase = getSupabase();
-      if (!supabase) throw new Error('Supabase not initialized');
+      if (!supabase) throw new Error("Supabase not initialized");
 
       const { error } = await supabase
-        .from('files')
+        .from("files")
         .update({ is_locked: false })
-        .eq('id', file.id);
+        .eq("id", file.id);
 
       if (error) throw error;
 
@@ -506,29 +463,31 @@ export default function Codespace() {
       updateFile(file.id, { is_locked: false });
 
       toast({
-        title: 'File Unlocked',
+        title: "File Unlocked",
         description: `${file.name} is now unlocked and can be edited`,
       });
     } catch (error) {
-      console.error('Error unlocking file:', error);
+      console.error("Error unlocking file:", error);
       toast({
-        title: 'Error',
-        description: 'Failed to unlock file',
-        variant: 'destructive',
+        title: "Error",
+        description: "Failed to unlock file",
+        variant: "destructive",
       });
     }
   };
 
-  const handleUploadImage = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUploadImage = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     // Validate file type
-    if (!file.type.startsWith('image/')) {
+    if (!file.type.startsWith("image/")) {
       toast({
-        title: 'Invalid file type',
-        description: 'Please select an image file',
-        variant: 'destructive',
+        title: "Invalid file type",
+        description: "Please select an image file",
+        variant: "destructive",
       });
       return;
     }
@@ -537,16 +496,16 @@ export default function Codespace() {
     const maxSize = 500 * 1024; // 500KB in bytes
     if (file.size > maxSize) {
       toast({
-        title: 'File too large',
-        description: 'Image must be smaller than 500KB',
-        variant: 'destructive',
+        title: "File too large",
+        description: "Image must be smaller than 500KB",
+        variant: "destructive",
       });
       return;
     }
 
     try {
       const supabase = getSupabase();
-      if (!supabase) throw new Error('Supabase not initialized');
+      if (!supabase) throw new Error("Supabase not initialized");
 
       // Convert image to base64
       const reader = new FileReader();
@@ -554,16 +513,18 @@ export default function Codespace() {
         const base64Content = e.target?.result as string;
 
         // Create file record in database
-        const parentFolder = uploadParentId ? files.find(f => f.id === uploadParentId) : null;
-        const parentPath = parentFolder?.path || '/';
+        const parentFolder = uploadParentId
+          ? files.find((f) => f.id === uploadParentId)
+          : null;
+        const parentPath = parentFolder?.path || "/";
         const filePath = buildFilePath(file.name, parentPath);
 
         const { data, error } = await supabase
-          .from('files')
+          .from("files")
           .insert({
             codespace_id: codespaceId,
             name: file.name,
-            type: 'file',
+            type: "file",
             parent_id: uploadParentId || null,
             content: base64Content,
             language: null,
@@ -583,23 +544,23 @@ export default function Codespace() {
         }
 
         toast({
-          title: 'Image uploaded',
+          title: "Image uploaded",
           description: `${file.name} has been uploaded successfully`,
         });
       };
 
       reader.readAsDataURL(file);
     } catch (error) {
-      console.error('Error uploading image:', error);
+      console.error("Error uploading image:", error);
       toast({
-        title: 'Upload failed',
-        description: 'Failed to upload image',
-        variant: 'destructive',
+        title: "Upload failed",
+        description: "Failed to upload image",
+        variant: "destructive",
       });
     } finally {
       // Clear the input and parent ID
       if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+        fileInputRef.current.value = "";
       }
       setUploadParentId(undefined);
     }
@@ -610,12 +571,12 @@ export default function Codespace() {
 
     try {
       const supabase = getSupabase();
-      if (!supabase) throw new Error('Supabase not initialized');
+      if (!supabase) throw new Error("Supabase not initialized");
 
       const { error } = await supabase
-        .from('files')
+        .from("files")
         .update({ content, updated_at: new Date().toISOString() })
-        .eq('id', activeFileId);
+        .eq("id", activeFileId);
 
       if (error) throw error;
 
@@ -628,7 +589,7 @@ export default function Codespace() {
         // ignore if store not available
       }
     } catch (error) {
-      console.error('Error updating file:', error);
+      console.error("Error updating file:", error);
     }
   };
 
@@ -637,12 +598,12 @@ export default function Codespace() {
 
     try {
       const supabase = getSupabase();
-      if (!supabase) throw new Error('Supabase not initialized');
+      if (!supabase) throw new Error("Supabase not initialized");
 
       const { error } = await supabase
-        .from('codespaces')
+        .from("codespaces")
         .update({ name: tempName, updated_at: new Date().toISOString() })
-        .eq('id', codespaceId);
+        .eq("id", codespaceId);
 
       if (error) throw error;
 
@@ -650,15 +611,15 @@ export default function Codespace() {
       setEditingName(false);
 
       toast({
-        title: 'Success',
-        description: 'Codespace name updated',
+        title: "Success",
+        description: "Codespace name updated",
       });
     } catch (error) {
-      console.error('Error updating name:', error);
+      console.error("Error updating name:", error);
       toast({
-        title: 'Error',
-        description: 'Failed to update name',
-        variant: 'destructive',
+        title: "Error",
+        description: "Failed to update name",
+        variant: "destructive",
       });
     }
   };
@@ -667,44 +628,73 @@ export default function Codespace() {
     const url = window.location.href;
     navigator.clipboard.writeText(url);
     toast({
-      title: 'Link copied!',
-      description: 'Share this link to let others view your code',
+      title: "Link copied!",
+      description: "Share this link to let others view your code",
     });
   };
 
-  const checkSlugAvailability = async (newSlug: string): Promise<boolean> => {
-    if (!newSlug.trim() || newSlug === slug) return true;
+  const checkSlugAvailability = useCallback(
+    async (newSlug: string): Promise<boolean> => {
+      if (!newSlug.trim() || newSlug === slug) return true;
 
-    try {
-      const supabase = getSupabase();
-      if (!supabase) return false;
+      try {
+        const supabase = getSupabase();
+        if (!supabase) return false;
 
-      const { data, error } = await supabase
-        .from('codespaces')
-        .select('id')
-        .eq('slug', newSlug.trim())
-        .maybeSingle();
+        const { data, error } = await supabase
+          .from("codespaces")
+          .select("id")
+          .ilike("slug", newSlug.trim())
+          .maybeSingle();
 
-      if (error) {
-        console.error('Error checking slug availability:', error);
+        if (error) {
+          console.error("Error checking slug availability:", error);
+          return false;
+        }
+
+        return !data; // Available if no data found
+      } catch (error) {
+        console.error("Error checking slug availability:", error);
         return false;
       }
+    },
+    [slug]
+  );
 
-      return !data; // Available if no data found
-    } catch (error) {
-      console.error('Error checking slug availability:', error);
-      return false;
-    }
-  };
+  // Debounced slug availability check
+  const debouncedCheckSlug = useCallback(
+    (slugToCheck: string) => {
+      if (!slugToCheck.trim() || slugToCheck === slug) {
+        setSlugAvailable(null);
+        return;
+      }
+
+      const checkAvailability = async () => {
+        setCheckingSlug(true);
+        try {
+          const available = await checkSlugAvailability(slugToCheck);
+          setSlugAvailable(available);
+        } catch (error) {
+          setSlugAvailable(null);
+        } finally {
+          setCheckingSlug(false);
+        }
+      };
+
+      const timeoutId = setTimeout(checkAvailability, 500);
+      return () => clearTimeout(timeoutId);
+    },
+    [slug, checkSlugAvailability]
+  );
 
   const handleUpdateSlug = async () => {
     const newSlug = tempSlug.trim();
 
     if (!newSlug) {
       toast({
-        title: 'Invalid slug',
-        description: 'Slug cannot be empty',
-        variant: 'destructive',
+        title: "Invalid slug",
+        description: "Slug cannot be empty",
+        variant: "destructive",
       });
       return;
     }
@@ -714,27 +704,40 @@ export default function Codespace() {
       return;
     }
 
-    setCheckingSlug(true);
-    const isAvailable = await checkSlugAvailability(newSlug);
-    setCheckingSlug(false);
-
-    if (!isAvailable) {
+    // Check if slug availability is known and valid
+    if (slugAvailable === false) {
       toast({
-        title: 'Slug not available',
-        description: 'This slug is already taken. Please choose another one.',
-        variant: 'destructive',
+        title: "Slug not available",
+        description: "This slug is already taken. Please choose another one.",
+        variant: "destructive",
       });
       return;
     }
 
+    if (slugAvailable === null) {
+      // Still checking, wait for availability check to complete
+      setCheckingSlug(true);
+      const isAvailable = await checkSlugAvailability(newSlug);
+      setCheckingSlug(false);
+
+      if (!isAvailable) {
+        toast({
+          title: "Slug not available",
+          description: "This slug is already taken. Please choose another one.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     try {
       const supabase = getSupabase();
-      if (!supabase) throw new Error('Supabase not initialized');
+      if (!supabase) throw new Error("Supabase not initialized");
 
       const { error } = await supabase
-        .from('codespaces')
+        .from("codespaces")
         .update({ slug: newSlug, updated_at: new Date().toISOString() })
-        .eq('id', codespaceId);
+        .eq("id", codespaceId);
 
       if (error) throw error;
 
@@ -746,20 +749,30 @@ export default function Codespace() {
       router.push(`/${newSlug}`);
 
       toast({
-        title: 'Slug updated!',
-        description: 'Your codespace URL has been updated.',
+        title: "Slug updated!",
+        description: "Your codespace URL has been updated.",
       });
     } catch (error) {
-      console.error('Error updating slug:', error);
+      console.error("Error updating slug:", error);
       toast({
-        title: 'Error updating slug',
-        description: 'Failed to update the slug. Please try again.',
-        variant: 'destructive',
+        title: "Error updating slug",
+        description: "Failed to update the slug. Please try again.",
+        variant: "destructive",
       });
     } finally {
       setEditingSlug(false);
     }
   };
+
+  // Slug availability checking
+  useEffect(() => {
+    if (editingSlug && tempSlug !== slug) {
+      const cleanup = debouncedCheckSlug(tempSlug);
+      return cleanup;
+    } else {
+      setSlugAvailable(null);
+    }
+  }, [tempSlug, editingSlug, slug, debouncedCheckSlug]);
 
   const activeFile = files.find((f) => f.id === activeFileId);
 
@@ -783,7 +796,11 @@ export default function Codespace() {
               className="md:hidden"
               onClick={() => setSidebarOpen(!sidebarOpen)}
             >
-              {sidebarOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+              {sidebarOpen ? (
+                <X className="h-4 w-4" />
+              ) : (
+                <Menu className="h-4 w-4" />
+              )}
             </Button>
 
             {editingName ? (
@@ -792,8 +809,8 @@ export default function Codespace() {
                 onChange={(e) => setTempName(e.target.value)}
                 onBlur={handleUpdateName}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleUpdateName();
-                  if (e.key === 'Escape') {
+                  if (e.key === "Enter") handleUpdateName();
+                  if (e.key === "Escape") {
                     setTempName(name);
                     setEditingName(false);
                   }
@@ -812,128 +829,152 @@ export default function Codespace() {
           </div>
 
           {/* Slug editing - hidden on mobile */}
-                    <div className="hidden md:flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">/</span>
-                      {editingSlug ? (
-                        <div className="flex items-center gap-2">
-                          <Input
-                            value={tempSlug}
-                            onChange={(e) => setTempSlug(e.target.value)}
-                            onBlur={handleUpdateSlug}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleUpdateSlug();
-                              if (e.key === 'Escape') {
-                                setTempSlug(slug);
-                                setEditingSlug(false);
-                              }
-                            }}
-                            className="h-8 w-24 sm:w-32 text-sm"
-                            autoFocus
-                            disabled={checkingSlug}
-                          />
-                          {checkingSlug && <Loader2 className="h-4 w-4 animate-spin" />}
-                        </div>
-                      ) : (
-                        <span
-                          className="text-sm text-muted-foreground cursor-pointer hover:text-primary transition-colors"
-                          onClick={() => {
+          <div className="hidden md:flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">/</span>
+            {editingSlug ? (
+              <div className="flex items-center gap-2">
+                <Input
+                  value={tempSlug}
+                  onChange={(e) => setTempSlug(e.target.value)}
+                  onBlur={handleUpdateSlug}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleUpdateSlug();
+                    if (e.key === "Escape") {
+                      setTempSlug(slug);
+                      setEditingSlug(false);
+                    }
+                  }}
+                  className={`h-8 w-24 sm:w-32 text-sm ${
+                    slugAvailable === false
+                      ? "border-red-500"
+                      : slugAvailable === true
+                      ? "border-green-500"
+                      : ""
+                  }`}
+                  autoFocus
+                  disabled={checkingSlug}
+                />
+                {checkingSlug && <Loader2 className="h-4 w-4 animate-spin" />}
+                {!checkingSlug && slugAvailable === true && (
+                  <Check className="h-4 w-4 text-green-500" />
+                )}
+                {!checkingSlug && slugAvailable === false && (
+                  <X className="h-4 w-4 text-red-500" />
+                )}
+              </div>
+            ) : (
+              <span
+                className="text-sm text-muted-foreground cursor-pointer hover:text-primary transition-colors"
+                onClick={() => {
+                  setTempSlug(slug);
+                  setEditingSlug(true);
+                }}
+              >
+                {slug}
+              </span>
+            )}
+          </div>
+
+          {/* Visitor count - hidden on mobile */}
+          <div className="hidden md:flex items-center gap-1 text-sm text-muted-foreground">
+            <Eye className="h-4 w-4" />
+            <span>{visitorCount} views</span>
+          </div>
+
+          {/* Mobile menu dropdown */}
+          <div className="md:hidden">
+            <DropdownMenu
+              open={mobileMenuOpen}
+              onOpenChange={setMobileMenuOpen}
+            >
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm">
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">/</span>
+                  {editingSlug ? (
+                    <div className="flex items-center gap-2 flex-1">
+                      <Input
+                        value={tempSlug}
+                        onChange={(e) => setTempSlug(e.target.value)}
+                        onBlur={() => {
+                          handleUpdateSlug();
+                          setMobileMenuOpen(false);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            handleUpdateSlug();
+                            setMobileMenuOpen(false);
+                          }
+                          if (e.key === "Escape") {
                             setTempSlug(slug);
-                            setEditingSlug(true);
-                          }}
-                        >
-                          {slug}
-                        </span>
+                            setEditingSlug(false);
+                            setMobileMenuOpen(false);
+                          }
+                        }}
+                        className={`h-6 text-sm flex-1 ${
+                          slugAvailable === false
+                            ? "border-red-500"
+                            : slugAvailable === true
+                            ? "border-green-500"
+                            : ""
+                        }`}
+                        autoFocus
+                        disabled={checkingSlug}
+                      />
+                      {checkingSlug && (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      )}
+                      {!checkingSlug && slugAvailable === true && (
+                        <Check className="h-3 w-3 text-green-500" />
+                      )}
+                      {!checkingSlug && slugAvailable === false && (
+                        <X className="h-3 w-3 text-red-500" />
                       )}
                     </div>
+                  ) : (
+                    <span
+                      className="text-sm cursor-pointer hover:text-primary transition-colors flex-1"
+                      onClick={() => {
+                        setTempSlug(slug);
+                        setEditingSlug(true);
+                      }}
+                    >
+                      {slug}
+                    </span>
+                  )}
+                </DropdownMenuItem>
+                <DropdownMenuItem className="flex items-center gap-2">
+                  <Eye className="h-4 w-4" />
+                  <span>{visitorCount} views</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                  className="flex items-center gap-2"
+                >
+                  <FileText className="h-4 w-4" />
+                  <span>{sidebarOpen ? "Hide" : "Show"} File Explorer</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={handleShare}
+                  className="flex items-center gap-2"
+                >
+                  <Share2 className="h-4 w-4" />
+                  <span>Share</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
 
-                    {/* Visitor count - hidden on mobile */}
-                    <div className="hidden md:flex items-center gap-1 text-sm text-muted-foreground">
-                      <Eye className="h-4 w-4" />
-                      <span>{visitorCount} views</span>
-                    </div>
-
-                    {/* Online count - hidden on mobile */}
-                    <div className="hidden md:flex items-center gap-1 text-sm text-muted-foreground">
-                      <Users className="h-4 w-4" />
-                      <span>{onlineCount} online</span>
-                    </div>
-
-                    {/* Mobile menu dropdown */}
-                    <div className="md:hidden">
-                      <DropdownMenu open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <ChevronDown className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem className="flex items-center gap-2">
-                            <span className="text-sm text-muted-foreground">/</span>
-                            {editingSlug ? (
-                              <div className="flex items-center gap-2 flex-1">
-                                <Input
-                                  value={tempSlug}
-                                  onChange={(e) => setTempSlug(e.target.value)}
-                                  onBlur={() => {
-                                    handleUpdateSlug();
-                                    setMobileMenuOpen(false);
-                                  }}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      handleUpdateSlug();
-                                      setMobileMenuOpen(false);
-                                    }
-                                    if (e.key === 'Escape') {
-                                      setTempSlug(slug);
-                                      setEditingSlug(false);
-                                      setMobileMenuOpen(false);
-                                    }
-                                  }}
-                                  className="h-6 text-sm flex-1"
-                                  autoFocus
-                                  disabled={checkingSlug}
-                                />
-                                {checkingSlug && <Loader2 className="h-3 w-3 animate-spin" />}
-                              </div>
-                            ) : (
-                              <span
-                                className="text-sm cursor-pointer hover:text-primary transition-colors flex-1"
-                                onClick={() => {
-                                  setTempSlug(slug);
-                                  setEditingSlug(true);
-                                }}
-                              >
-                                {slug}
-                              </span>
-                            )}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="flex items-center gap-2">
-                            <Eye className="h-4 w-4" />
-                            <span>{visitorCount} views</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="flex items-center gap-2">
-                            <Users className="h-4 w-4" />
-                            <span>{onlineCount} online</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => setSidebarOpen(!sidebarOpen)}
-                            className="flex items-center gap-2"
-                          >
-                            <FileText className="h-4 w-4" />
-                            <span>{sidebarOpen ? 'Hide' : 'Show'} File Explorer</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={handleShare}
-                            className="flex items-center gap-2"
-                          >
-                            <Share2 className="h-4 w-4" />
-                            <span>Share</span>
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-
-          <Button onClick={handleShare} variant="outline" size="sm" className="hidden sm:flex">
+          <Button
+            onClick={handleShare}
+            variant="outline"
+            size="sm"
+            className="hidden sm:flex"
+          >
             <Share2 className="h-4 w-4 mr-2" />
             Share
           </Button>
@@ -949,13 +990,17 @@ export default function Codespace() {
           />
         )}
 
-        <aside className={`
+        <aside
+          className={`
           w-full md:w-80 border-t md:border-t-0 md:border-r bg-white flex flex-col
           fixed md:relative bottom-0 md:bottom-auto md:inset-y-0 left-0 md:left-auto z-50 md:z-auto
-          transform ${sidebarOpen ? 'translate-y-0' : 'translate-y-full'} md:translate-y-0
+          transform ${
+            sidebarOpen ? "translate-y-0" : "translate-y-full"
+          } md:translate-y-0
           transition-transform duration-200 ease-in-out
           h-80 md:h-auto shadow-lg md:shadow-none
-        `}>
+        `}
+        >
           <div className="p-2 border-b bg-muted/50">
             <div className="flex items-center gap-1 flex-wrap">
               <Button
@@ -1009,11 +1054,16 @@ export default function Codespace() {
                 }
 
                 const { unsavedFileIds } = useCodespaceStore.getState();
-                if (unsavedFileIds && unsavedFileIds.size > 0 && unsavedFileIds.has(activeFileId || '')) {
+                if (
+                  unsavedFileIds &&
+                  unsavedFileIds.size > 0 &&
+                  unsavedFileIds.has(activeFileId || "")
+                ) {
                   // If there are unsaved files, warn and prevent switching
                   toast({
-                    title: 'Save changes',
-                    description: 'Please save current changes before switching files',
+                    title: "Save changes",
+                    description:
+                      "Please save current changes before switching files",
                   });
                   return;
                 }
@@ -1045,25 +1095,30 @@ export default function Codespace() {
         </aside>
 
         <main className="flex-1 overflow-hidden bg-background">
-          <CodeEditor
-            onContentChange={handleContentChange}
-          />
+          <CodeEditor onContentChange={handleContentChange} />
         </main>
       </div>
 
-      <AlertDialog open={!!fileToDelete} onOpenChange={() => setFileToDelete(null)}>
+      <AlertDialog
+        open={!!fileToDelete}
+        onOpenChange={() => setFileToDelete(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {fileToDelete?.type}</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete &quot;{fileToDelete?.name}&quot;?
-              {fileToDelete?.type === 'folder' && ' This will also delete all files and folders inside it.'}
+              {fileToDelete?.type === "folder" &&
+                " This will also delete all files and folders inside it."}
               This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDeleteFile} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction
+              onClick={confirmDeleteFile}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1080,14 +1135,17 @@ export default function Codespace() {
               <Image
                 src={selectedImage.content}
                 alt={selectedImage.name}
+                width={800}
+                height={600}
                 className="max-w-full max-h-[60vh] object-contain rounded-lg"
               />
             )}
+
             <Button
               onClick={() => {
                 if (selectedImage) {
-                  const link = document.createElement('a');
-                  link.href = selectedImage.content || '';
+                  const link = document.createElement("a");
+                  link.href = selectedImage.content || "";
                   link.download = selectedImage.name;
                   document.body.appendChild(link);
                   link.click();

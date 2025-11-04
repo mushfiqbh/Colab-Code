@@ -6,7 +6,6 @@ type CodespaceStore = {
   slug: string | null;
   name: string;
   visitorCount: number;
-  onlineCount: number;
   files: FileItem[];
   activeFileId: string | null;
   openFileIds: string[];
@@ -30,7 +29,6 @@ type CodespaceStore = {
   collapseAllFolders: () => void;
   updateCodespaceName: (name: string) => void;
   incrementVisitorCount: () => void;
-  setOnlineCount: (count: number) => void;
   reset: () => void;
 };
 
@@ -39,7 +37,6 @@ export const useCodespaceStore = create<CodespaceStore>((set) => ({
   slug: null,
   name: 'Untitled Codespace',
   visitorCount: 0,
-  onlineCount: 0,
   files: [],
   activeFileId: null,
   openFileIds: [],
@@ -168,15 +165,12 @@ export const useCodespaceStore = create<CodespaceStore>((set) => ({
   incrementVisitorCount: () =>
     set((state) => ({ visitorCount: state.visitorCount + 1 })),
 
-  setOnlineCount: (count) => set({ onlineCount: count }),
-
   reset: () =>
     set({
       codespaceId: null,
       slug: null,
       name: 'Untitled Codespace',
       visitorCount: 0,
-      onlineCount: 0,
       files: [],
       activeFileId: null,
       openFileIds: [],

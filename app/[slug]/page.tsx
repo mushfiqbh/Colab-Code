@@ -17,7 +17,7 @@ export async function generateMetadata({ params }: { params: { slug: string } })
     const { data: codespace, error } = await supabase
       .from('codespaces')
       .select('name, slug, visitor_count')
-      .eq('slug', params.slug)
+      .ilike('slug', params.slug)
       .maybeSingle();
 
     if (error || !codespace) {
