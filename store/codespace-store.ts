@@ -5,13 +5,15 @@ type CodespaceStore = {
   codespaceId: string | null;
   slug: string | null;
   name: string;
+  visitorCount: number;
+  onlineCount: number;
   files: FileItem[];
   activeFileId: string | null;
   openFileIds: string[];
   expandedFolders: Set<string>;
   unsavedFileIds: Set<string>;
 
-  setCodespace: (id: string, slug: string, name: string) => void;
+  setCodespace: (id: string, slug: string, name: string, visitorCount?: number) => void;
   setFiles: (files: FileItem[]) => void;
   addFile: (file: FileItem) => void;
   updateFile: (id: string, updates: Partial<FileItem>) => void;
@@ -27,6 +29,8 @@ type CodespaceStore = {
   expandFolder: (id: string) => void;
   collapseAllFolders: () => void;
   updateCodespaceName: (name: string) => void;
+  incrementVisitorCount: () => void;
+  setOnlineCount: (count: number) => void;
   reset: () => void;
 };
 
@@ -34,14 +38,16 @@ export const useCodespaceStore = create<CodespaceStore>((set) => ({
   codespaceId: null,
   slug: null,
   name: 'Untitled Codespace',
+  visitorCount: 0,
+  onlineCount: 0,
   files: [],
   activeFileId: null,
   openFileIds: [],
   expandedFolders: new Set(),
   unsavedFileIds: new Set(),
 
-  setCodespace: (id, slug, name) =>
-    set({ codespaceId: id, slug, name }),
+  setCodespace: (id, slug, name, visitorCount = 0) =>
+    set({ codespaceId: id, slug, name, visitorCount }),
 
   setFiles: (files) => set({ files }),
 
@@ -159,14 +165,22 @@ export const useCodespaceStore = create<CodespaceStore>((set) => ({
 
   updateCodespaceName: (name) => set({ name }),
 
+  incrementVisitorCount: () =>
+    set((state) => ({ visitorCount: state.visitorCount + 1 })),
+
+  setOnlineCount: (count) => set({ onlineCount: count }),
+
   reset: () =>
     set({
       codespaceId: null,
       slug: null,
       name: 'Untitled Codespace',
+      visitorCount: 0,
+      onlineCount: 0,
       files: [],
       activeFileId: null,
       openFileIds: [],
       expandedFolders: new Set(),
+      unsavedFileIds: new Set(),
     }),
 }));

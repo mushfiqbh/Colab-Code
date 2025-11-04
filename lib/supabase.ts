@@ -28,8 +28,17 @@ export type Codespace = {
   id: string;
   slug: string;
   name: string;
+  visitor_count: number;
   created_at: string;
   updated_at: string;
+};
+
+export type OnlineUser = {
+  id: string;
+  codespace_id: string;
+  user_id: string;
+  last_seen: string;
+  created_at: string;
 };
 
 export type FileItem = {

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { getSupabase, FileItem } from '@/lib/supabase';
 import { useCodespaceStore } from '@/store/codespace-store';
 import { FileTree } from '@/components/file-tree';
@@ -36,7 +37,9 @@ import {
   ChevronDown,
   Menu,
   X,
-  Download
+  Download,
+  Eye,
+  Users
 } from 'lucide-react';
 import { buildFilePath, getFileLanguage, sortFiles } from '@/lib/file-utils';
 import { useToast } from '@/hooks/use-toast';
@@ -51,6 +54,8 @@ export default function CodespacePage() {
   const {
     codespaceId,
     name,
+    visitorCount,
+    onlineCount,
     files,
     activeFileId,
     openFileIds,
@@ -65,6 +70,8 @@ export default function CodespacePage() {
     openFile,
     closeFile,
     updateCodespaceName,
+    incrementVisitorCount,
+    setOnlineCount,
     expandFolder,
   } = useCodespaceStore();
 
@@ -80,6 +87,7 @@ export default function CodespacePage() {
   const [uploadParentId, setUploadParentId] = useState<string | undefined>(undefined);
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState<FileItem | null>(null);
+  const [userId] = useState(() => `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Update document title dynamically
@@ -118,8 +126,22 @@ export default function CodespacePage() {
         return;
       }
 
-      setCodespace(codespace.id, codespace.slug, codespace.name);
+      setCodespace(codespace.id, codespace.slug, codespace.name, codespace.visitor_count || 0);
       setTempName(codespace.name);
+
+      // Increment visitor count
+      const { error: updateError } = await supabase
+        .from('codespaces')
+        .update({ visitor_count: (codespace.visitor_count || 0) + 1 })
+        .eq('id', codespace.id);
+
+      if (updateError) {
+        console.error('Error updating visitor count:', updateError);
+      } else {
+        // Update local state
+        const store = useCodespaceStore.getState();
+        store.incrementVisitorCount();
+      }
 
       const { data: filesData, error: filesError } = await supabase
         .from('files')
@@ -144,6 +166,110 @@ export default function CodespacePage() {
   useEffect(() => {
     loadCodespace();
   }, [slug, loadCodespace]);
+
+  // Online user tracking
+  useEffect(() => {
+    if (!codespaceId) return;
+
+    const supabase = getSupabase();
+    if (!supabase) return;
+
+    let heartbeatInterval: NodeJS.Timeout;
+    let cleanupInterval: NodeJS.Timeout;
+
+    const joinPresence = async () => {
+      try {
+        // Add user to online_users table
+        const { error } = await supabase
+          .from('online_users')
+          .upsert({
+            codespace_id: codespaceId,
+            user_id: userId,
+            last_seen: new Date().toISOString(),
+          });
+
+        if (error) {
+          console.error('Error joining presence:', error);
+          return;
+        }
+
+        // Start heartbeat to keep user online
+        heartbeatInterval = setInterval(async () => {
+          await supabase
+            .from('online_users')
+            .update({ last_seen: new Date().toISOString() })
+            .eq('codespace_id', codespaceId)
+            .eq('user_id', userId);
+        }, 30000); // Update every 30 seconds
+
+        // Clean up inactive users periodically
+        cleanupInterval = setInterval(async () => {
+          await supabase
+            .from('online_users')
+            .delete()
+            .eq('codespace_id', codespaceId)
+            .lt('last_seen', new Date(Date.now() - 120000).toISOString()); // Remove users inactive for 2 minutes
+        }, 60000); // Clean up every minute
+
+        // Subscribe to real-time changes
+        const channel = supabase
+          .channel(`online_users_${codespaceId}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'online_users',
+              filter: `codespace_id=eq.${codespaceId}`,
+            },
+            async () => {
+              // Count current online users (active within last 60 seconds)
+              const { count, error } = await supabase
+                .from('online_users')
+                .select('*', { count: 'exact', head: true })
+                .eq('codespace_id', codespaceId)
+                .gte('last_seen', new Date(Date.now() - 60000).toISOString());
+
+              if (!error && count !== null) {
+                setOnlineCount(count);
+              }
+            }
+          )
+          .subscribe();
+
+        return () => {
+          channel.unsubscribe();
+        };
+      } catch (error) {
+        console.error('Error setting up presence:', error);
+      }
+    };
+
+    const leavePresence = async () => {
+      try {
+        await supabase
+          .from('online_users')
+          .delete()
+          .eq('codespace_id', codespaceId)
+          .eq('user_id', userId);
+      } catch (error) {
+        console.error('Error leaving presence:', error);
+      }
+    };
+
+    joinPresence();
+
+    // Cleanup on unmount
+    return () => {
+      if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+      }
+      if (cleanupInterval) {
+        clearInterval(cleanupInterval);
+      }
+      leavePresence();
+    };
+  }, [codespaceId, userId, setOnlineCount]);
 
   const handleCreateItem = async (itemName: string, type: 'file' | 'folder', parentId?: string) => {
     if (!codespaceId) return;
@@ -715,6 +841,18 @@ export default function CodespacePage() {
                       )}
                     </div>
 
+                    {/* Visitor count */}
+                    <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                      <Eye className="h-4 w-4" />
+                      <span>{visitorCount} views</span>
+                    </div>
+
+                    {/* Online count */}
+                    <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                      <Users className="h-4 w-4" />
+                      <span>{onlineCount} online</span>
+                    </div>
+
           <Button onClick={handleShare} variant="outline" size="sm" className="hidden sm:flex">
             <Share2 className="h-4 w-4 mr-2" />
             Share
@@ -859,7 +997,7 @@ export default function CodespacePage() {
           </DialogHeader>
           <div className="flex flex-col items-center gap-4">
             {selectedImage?.content && (
-              <img
+              <Image
                 src={selectedImage.content}
                 alt={selectedImage.name}
                 className="max-w-full max-h-[60vh] object-contain rounded-lg"
