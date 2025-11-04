@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { FileItem } from '@/lib/supabase';
 import { useCodespaceStore } from '@/store/codespace-store';
-import { ChevronRight, ChevronDown, File, Folder, FolderOpen, Plus, FileText, MoreVertical, Edit, Trash2, Lock, Unlock } from 'lucide-react';
+import { ChevronRight, ChevronDown, File, Folder, FolderOpen, Plus, FileText, MoreVertical, Edit, Trash2, Lock, Unlock, Image, Upload, Download } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,14 +23,31 @@ type FileTreeProps = {
   onCreateNewItem?: (type: 'file' | 'folder', name: string, parentId?: string) => void;
   onLockFile?: (file: FileItem) => void;
   onUnlockFile?: (file: FileItem) => void;
+  onUploadImage?: (parentId?: string) => void;
   creatingItem?: { type: 'file' | 'folder'; parentId?: string } | null;
   onCancelCreating?: () => void;
 };
 
-export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolder, onCreateFolderInFolder, onRenameFile, onCreateNewItem, onLockFile, onUnlockFile, creatingItem, onCancelCreating }: FileTreeProps) {
+export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolder, onCreateFolderInFolder, onRenameFile, onCreateNewItem, onLockFile, onUnlockFile, onUploadImage, creatingItem, onCancelCreating }: FileTreeProps) {
   const { activeFileId, expandedFolders, toggleFolder } = useCodespaceStore();
   const [editingFileId, setEditingFileId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
+
+  const isImageFile = (file: FileItem) => {
+    return file.content?.startsWith('data:image/') || 
+           file.name.match(/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i);
+  };
+
+  const downloadFile = (file: FileItem) => {
+    if (!file.content) return;
+    
+    const link = document.createElement('a');
+    link.href = file.content;
+    link.download = file.name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const rootFiles = files.filter((f) => !f.parent_id);
 
@@ -137,6 +154,8 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
             ) : (
               <Folder className="h-4 w-4 flex-shrink-0 text-blue-500" />
             )
+          ) : isImageFile(file) ? (
+            <Image className="h-4 w-4 flex-shrink-0 text-green-500" aria-label={file.name} />
           ) : (
             <File className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
           )}
@@ -199,6 +218,15 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
                     <Plus className="h-4 w-4 mr-2" />
                     New Folder
                   </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUploadImage?.(file.id);
+                    }}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload Image
+                  </DropdownMenuItem>
                 </>
               )}
               {!isFolder && (
@@ -225,6 +253,17 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
                     </DropdownMenuItem>
                   )}
                 </>
+              )}
+              {!isFolder && isImageFile(file) && (
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    downloadFile(file);
+                  }}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download
+                </DropdownMenuItem>
               )}
               <DropdownMenuItem
                 onClick={(e) => {

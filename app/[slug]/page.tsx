@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { getSupabase, FileItem } from '@/lib/supabase';
 import { useCodespaceStore } from '@/store/codespace-store';
@@ -20,6 +20,12 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Plus,
   Share2,
   Loader2,
@@ -29,7 +35,8 @@ import {
   RefreshCw,
   ChevronDown,
   Menu,
-  X
+  X,
+  Download
 } from 'lucide-react';
 import { buildFilePath, getFileLanguage, sortFiles } from '@/lib/file-utils';
 import { useToast } from '@/hooks/use-toast';
@@ -70,6 +77,10 @@ export default function CodespacePage() {
   const [fileToDelete, setFileToDelete] = useState<FileItem | null>(null);
   const [creatingItem, setCreatingItem] = useState<{ type: 'file' | 'folder'; parentId?: string; name?: string } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [uploadParentId, setUploadParentId] = useState<string | undefined>(undefined);
+  const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<FileItem | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Update document title dynamically
   useEffect(() => {
@@ -191,6 +202,11 @@ export default function CodespacePage() {
         variant: 'destructive',
       });
     }
+  };
+
+  const isImageFile = (file: FileItem) => {
+    return file.content?.startsWith('data:image/') || 
+           file.name.match(/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i);
   };
 
   const handleNewFile = () => {
@@ -369,6 +385,92 @@ export default function CodespacePage() {
         description: 'Failed to unlock file',
         variant: 'destructive',
       });
+    }
+  };
+
+  const handleUploadImage = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: 'Invalid file type',
+        description: 'Please select an image file',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate file size (500KB limit)
+    const maxSize = 500 * 1024; // 500KB in bytes
+    if (file.size > maxSize) {
+      toast({
+        title: 'File too large',
+        description: 'Image must be smaller than 500KB',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      const supabase = getSupabase();
+      if (!supabase) throw new Error('Supabase not initialized');
+
+      // Convert image to base64
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const base64Content = e.target?.result as string;
+
+        // Create file record in database
+        const parentFolder = uploadParentId ? files.find(f => f.id === uploadParentId) : null;
+        const parentPath = parentFolder?.path || '/';
+        const filePath = buildFilePath(file.name, parentPath);
+
+        const { data, error } = await supabase
+          .from('files')
+          .insert({
+            codespace_id: codespaceId,
+            name: file.name,
+            type: 'file',
+            parent_id: uploadParentId || null,
+            content: base64Content,
+            language: null,
+            path: filePath,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        addFile(data);
+        setFiles(sortFiles([...files, data]));
+
+        // Expand the parent folder if it exists
+        if (uploadParentId) {
+          expandFolder(uploadParentId);
+        }
+
+        toast({
+          title: 'Image uploaded',
+          description: `${file.name} has been uploaded successfully`,
+        });
+      };
+
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      toast({
+        title: 'Upload failed',
+        description: 'Failed to upload image',
+        variant: 'destructive',
+      });
+    } finally {
+      // Clear the input and parent ID
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      setUploadParentId(undefined);
     }
   };
 
@@ -630,7 +732,7 @@ export default function CodespacePage() {
         )}
 
         <aside className={`
-          w-full md:w-64 border-t md:border-t-0 md:border-r bg-white flex flex-col
+          w-full md:w-80 border-t md:border-t-0 md:border-r bg-white flex flex-col
           fixed md:relative bottom-0 md:bottom-auto md:inset-y-0 left-0 md:left-auto z-50 md:z-auto
           transform ${sidebarOpen ? 'translate-y-0' : 'translate-y-full'} md:translate-y-0
           transition-transform duration-200 ease-in-out
@@ -681,6 +783,13 @@ export default function CodespacePage() {
             <FileTree
               files={files}
               onFileClick={(file) => {
+                if (isImageFile(file)) {
+                  setSelectedImage(file);
+                  setImageModalOpen(true);
+                  setSidebarOpen(false); // Close sidebar on mobile
+                  return;
+                }
+
                 const { unsavedFileIds } = useCodespaceStore.getState();
                 if (unsavedFileIds && unsavedFileIds.size > 0 && unsavedFileIds.has(activeFileId || '')) {
                   // If there are unsaved files, warn and prevent switching
@@ -702,6 +811,17 @@ export default function CodespacePage() {
               onUnlockFile={handleUnlockFile}
               creatingItem={creatingItem}
               onCancelCreating={handleCancelCreating}
+              onUploadImage={(parentId) => {
+                setUploadParentId(parentId);
+                fileInputRef.current?.click();
+              }}
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleUploadImage}
+              className="hidden"
             />
           </div>
         </aside>
@@ -731,6 +851,39 @@ export default function CodespacePage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={imageModalOpen} onOpenChange={setImageModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-auto">
+          <DialogHeader>
+            <DialogTitle>{selectedImage?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-4">
+            {selectedImage?.content && (
+              <img
+                src={selectedImage.content}
+                alt={selectedImage.name}
+                className="max-w-full max-h-[60vh] object-contain rounded-lg"
+              />
+            )}
+            <Button
+              onClick={() => {
+                if (selectedImage) {
+                  const link = document.createElement('a');
+                  link.href = selectedImage.content || '';
+                  link.download = selectedImage.name;
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                }
+              }}
+              className="w-fit"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Download
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Toaster />
     </div>
