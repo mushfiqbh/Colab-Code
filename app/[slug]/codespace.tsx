@@ -111,6 +111,8 @@ export default function Codespace() {
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState<FileItem | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [shareSlug, setShareSlug] = useState(slug);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadCodespace = useCallback(async () => {
@@ -624,15 +626,6 @@ export default function Codespace() {
     }
   };
 
-  const handleShare = () => {
-    const url = window.location.href;
-    navigator.clipboard.writeText(url);
-    toast({
-      title: "Link copied!",
-      description: "Share this link to let others view your code",
-    });
-  };
-
   const checkSlugAvailability = useCallback(
     async (newSlug: string): Promise<boolean> => {
       if (!newSlug.trim() || newSlug === slug) return true;
@@ -764,15 +757,115 @@ export default function Codespace() {
     }
   };
 
+  const handleShare = () => {
+    setShareSlug(slug);
+    setShareModalOpen(true);
+  };
+
+  const handleCopyShareLink = async () => {
+    const url = `${window.location.origin}/${shareSlug}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({
+        title: "Link copied!",
+        description: "Share this link to let others view your code",
+      });
+      setShareModalOpen(false);
+    } catch (error) {
+      toast({
+        title: "Failed to copy",
+        description: "Please copy the link manually",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleUpdateSlugFromModal = async () => {
+    const newSlug = shareSlug.trim();
+
+    if (!newSlug) {
+      toast({
+        title: "Invalid slug",
+        description: "Slug cannot be empty",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (newSlug === slug) {
+      setShareModalOpen(false);
+      return;
+    }
+
+    // Check if slug availability is known and valid
+    if (slugAvailable === false) {
+      toast({
+        title: "Slug not available",
+        description: "This slug is already taken. Please choose another one.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (slugAvailable === null) {
+      // Still checking, wait for availability check to complete
+      setCheckingSlug(true);
+      const isAvailable = await checkSlugAvailability(newSlug);
+      setCheckingSlug(false);
+
+      if (!isAvailable) {
+        toast({
+          title: "Slug not available",
+          description: "This slug is already taken. Please choose another one.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    try {
+      const supabase = getSupabase();
+      if (!supabase) throw new Error("Supabase not initialized");
+
+      const { error } = await supabase
+        .from("codespaces")
+        .update({ slug: newSlug, updated_at: new Date().toISOString() })
+        .eq("id", codespaceId);
+
+      if (error) throw error;
+
+      // Update the store
+      const store = useCodespaceStore.getState();
+      store.setCodespace(codespaceId!, newSlug, store.name);
+
+      // Redirect to new URL
+      router.push(`/${newSlug}`);
+
+      toast({
+        title: "Slug updated!",
+        description: "Your codespace URL has been updated.",
+      });
+      setShareModalOpen(false);
+    } catch (error) {
+      console.error("Error updating slug:", error);
+      toast({
+        title: "Error updating slug",
+        description: "Failed to update the slug. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Slug availability checking
   useEffect(() => {
-    if (editingSlug && tempSlug !== slug) {
-      const cleanup = debouncedCheckSlug(tempSlug);
+    if ((editingSlug && tempSlug !== slug) || (shareModalOpen && shareSlug !== slug)) {
+      const slugToCheck = editingSlug ? tempSlug : shareSlug;
+      const cleanup = debouncedCheckSlug(slugToCheck);
       return cleanup;
     } else {
       setSlugAvailable(null);
     }
-  }, [tempSlug, editingSlug, slug, debouncedCheckSlug]);
+  }, [tempSlug, editingSlug, slug, debouncedCheckSlug, shareSlug, shareModalOpen]);
 
   const activeFile = files.find((f) => f.id === activeFileId);
 
@@ -828,53 +921,6 @@ export default function Codespace() {
             )}
           </div>
 
-          {/* Slug editing - hidden on mobile */}
-          <div className="hidden md:flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">/</span>
-            {editingSlug ? (
-              <div className="flex items-center gap-2">
-                <Input
-                  value={tempSlug}
-                  onChange={(e) => setTempSlug(e.target.value)}
-                  onBlur={handleUpdateSlug}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleUpdateSlug();
-                    if (e.key === "Escape") {
-                      setTempSlug(slug);
-                      setEditingSlug(false);
-                    }
-                  }}
-                  className={`h-8 w-24 sm:w-32 text-sm ${
-                    slugAvailable === false
-                      ? "border-red-500"
-                      : slugAvailable === true
-                      ? "border-green-500"
-                      : ""
-                  }`}
-                  autoFocus
-                  disabled={checkingSlug}
-                />
-                {checkingSlug && <Loader2 className="h-4 w-4 animate-spin" />}
-                {!checkingSlug && slugAvailable === true && (
-                  <Check className="h-4 w-4 text-green-500" />
-                )}
-                {!checkingSlug && slugAvailable === false && (
-                  <X className="h-4 w-4 text-red-500" />
-                )}
-              </div>
-            ) : (
-              <span
-                className="text-sm text-muted-foreground cursor-pointer hover:text-primary transition-colors"
-                onClick={() => {
-                  setTempSlug(slug);
-                  setEditingSlug(true);
-                }}
-              >
-                {slug}
-              </span>
-            )}
-          </div>
-
           {/* Visitor count - hidden on mobile */}
           <div className="hidden md:flex items-center gap-1 text-sm text-muted-foreground">
             <Eye className="h-4 w-4" />
@@ -892,60 +938,13 @@ export default function Codespace() {
                   <ChevronDown className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">/</span>
-                  {editingSlug ? (
-                    <div className="flex items-center gap-2 flex-1">
-                      <Input
-                        value={tempSlug}
-                        onChange={(e) => setTempSlug(e.target.value)}
-                        onBlur={() => {
-                          handleUpdateSlug();
-                          setMobileMenuOpen(false);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            handleUpdateSlug();
-                            setMobileMenuOpen(false);
-                          }
-                          if (e.key === "Escape") {
-                            setTempSlug(slug);
-                            setEditingSlug(false);
-                            setMobileMenuOpen(false);
-                          }
-                        }}
-                        className={`h-6 text-sm flex-1 ${
-                          slugAvailable === false
-                            ? "border-red-500"
-                            : slugAvailable === true
-                            ? "border-green-500"
-                            : ""
-                        }`}
-                        autoFocus
-                        disabled={checkingSlug}
-                      />
-                      {checkingSlug && (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      )}
-                      {!checkingSlug && slugAvailable === true && (
-                        <Check className="h-3 w-3 text-green-500" />
-                      )}
-                      {!checkingSlug && slugAvailable === false && (
-                        <X className="h-3 w-3 text-red-500" />
-                      )}
-                    </div>
-                  ) : (
-                    <span
-                      className="text-sm cursor-pointer hover:text-primary transition-colors flex-1"
-                      onClick={() => {
-                        setTempSlug(slug);
-                        setEditingSlug(true);
-                      }}
-                    >
-                      {slug}
-                    </span>
-                  )}
+              <DropdownMenuContent align="end" className="w-48">                
+                <DropdownMenuItem
+                  onClick={handleShare}
+                  className="flex items-center gap-2"
+                >
+                  <Share2 className="h-4 w-4" />
+                  <span>Share</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem className="flex items-center gap-2">
                   <Eye className="h-4 w-4" />
@@ -957,13 +956,6 @@ export default function Codespace() {
                 >
                   <FileText className="h-4 w-4" />
                   <span>{sidebarOpen ? "Hide" : "Show"} File Explorer</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={handleShare}
-                  className="flex items-center gap-2"
-                >
-                  <Share2 className="h-4 w-4" />
-                  <span>Share</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -1156,6 +1148,72 @@ export default function Codespace() {
             >
               <Download className="h-4 w-4 mr-2" />
               Download
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={shareModalOpen} onOpenChange={setShareModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Share Codespace</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Share Link</label>
+              <div className="flex items-center gap-2 mt-1">
+                <Input
+                  value={`${window.location.origin}/${shareSlug}`}
+                  readOnly
+                  className="flex-1"
+                />
+                <Button onClick={handleCopyShareLink} size="sm">
+                  Copy
+                </Button>
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Slug</label>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-sm text-muted-foreground">/</span>
+                <Input
+                  value={shareSlug}
+                  onChange={(e) => setShareSlug(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleUpdateSlugFromModal();
+                  }}
+                  className={`flex-1 h-8 text-sm ${
+                    slugAvailable === false
+                      ? "border-red-500"
+                      : slugAvailable === true
+                      ? "border-green-500"
+                      : ""
+                  }`}
+                  disabled={checkingSlug}
+                  autoFocus
+                  placeholder="Enter slug"
+                />
+                {checkingSlug && <Loader2 className="h-4 w-4 animate-spin" />}
+                {!checkingSlug && slugAvailable === true && (
+                  <Check className="h-4 w-4 text-green-500" />
+                )}
+                {!checkingSlug && slugAvailable === false && (
+                  <X className="h-4 w-4 text-red-500" />
+                )}
+              </div>
+              {slugAvailable === false && (
+                <p className="text-sm text-red-500 mt-1">
+                  This slug is already taken. Please choose another one.
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setShareModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateSlugFromModal} disabled={checkingSlug}>
+              Save Slug
             </Button>
           </div>
         </DialogContent>
