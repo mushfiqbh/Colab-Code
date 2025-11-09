@@ -54,3 +54,12 @@ export type FileItem = {
   created_at: string;
   updated_at: string;
 };
+
+export type FileComment = {
+  id: string;
+  codespace_id: string;
+  file_id: string;
+  author: string | null;
+  content: string;
+  created_at: string;
+};
