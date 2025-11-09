@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { nanoid } from "nanoid";
+import { FolderOpen } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import {
@@ -95,28 +96,34 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
+    <div className="min-h-screen relative overflow-hidden">
+      {/* Animated gradient background */}
+      <div className="absolute inset-0 -z-10">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-500/10 via-background to-background"></div>
+        <div className="absolute top-0 right-0 w-1/2 h-1/2 bg-gradient-to-br from-purple-500/20 to-transparent rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob"></div>
+        <div className="absolute bottom-0 left-0 w-1/2 h-1/2 bg-gradient-to-tr from-blue-500/20 to-transparent rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-2000"></div>
+        <div className="absolute top-1/2 left-1/2 w-1/2 h-1/2 bg-gradient-to-tl from-emerald-500/20 to-transparent rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-4000"></div>
+      </div>
       <div className="container max-w-6xl mx-auto px-4 py-8 sm:py-16">
-        <div className="text-center space-y-4 sm:space-y-6 mb-12 sm:mb-16">
-          <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-primary/10 mb-4">
-            <Code2 className="h-8 w-8 sm:h-10 sm:w-10 text-primary" />
+        <div className="text-center space-y-6 sm:space-y-8 mb-16 sm:mb-20">
+          <div className="space-y-4 mt-16">
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/80">
+              Share Code Instantly
+            </h1>
+            <div className="h-1.5 w-24 bg-gradient-to-r from-blue-500 to-blue-500/30 mx-auto rounded-full"></div>
           </div>
 
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight">
-            Share Code Instantly
-          </h1>
-
-          <p className="text-base sm:text-lg lg:text-xl text-muted-foreground max-w-2xl mx-auto px-4">
+          <p className="text-lg sm:text-xl lg:text-2xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
             Create, edit, and share code snippets without any login. Perfect for
-            collaboration, code reviews, and quick sharing.
+            <span className="text-foreground font-medium"> collaboration</span>, <span className="text-foreground font-medium">code reviews</span>, and <span className="text-foreground font-medium">quick sharing</span>.
           </p>
 
-          <div className="pt-4 sm:pt-6">
+          <div className="pt-6 sm:pt-8 space-y-4">
             <Button
               onClick={handleCreateCodespace}
               disabled={creating}
               size="lg"
-              className="text-base sm:text-lg px-6 sm:px-8 py-4 sm:py-6 h-auto min-h-[48px] w-full sm:w-auto"
+              className="group relative overflow-hidden text-base sm:text-lg px-8 py-6 h-auto min-h-[52px] w-full sm:w-auto bg-gradient-to-r from-blue-500 to-blue-500/90 hover:from-blue-500/90 hover:to-blue-500/80 transition-all duration-300 transform hover:-translate-y-0.5 hover:shadow-lg"
             >
               {creating ? (
                 <>
@@ -125,72 +132,36 @@ export default function Home() {
                 </>
               ) : (
                 <>
-                  <Zap className="mr-2 h-5 w-5" />
-                  Create Codespace
+                  <Zap className="mr-2 h-5 w-5 group-hover:scale-110 transition-transform" />
+                  <span className="relative z-10">Create Codespace</span>
+                  <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></span>
                 </>
               )}
             </Button>
+            <p className="text-sm text-muted-foreground/70">No signup required. Start coding in seconds.</p>
           </div>
         </div>
 
-        <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mt-12 sm:mt-16">
-          <Card className="border-2">
-            <CardHeader>
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                <Zap className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-              </div>
-              <CardTitle className="text-lg sm:text-xl">
-                Instant Setup
-              </CardTitle>
-              <CardDescription className="text-sm sm:text-base">
-                No registration required. Start coding immediately with a single
-                click.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-
-          <Card className="border-2">
-            <CardHeader>
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                <Share2 className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-              </div>
-              <CardTitle className="text-lg sm:text-xl">Easy Sharing</CardTitle>
-              <CardDescription className="text-sm sm:text-base">
-                Share your code with a unique URL. Perfect for collaboration and
-                code reviews.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-
-          <Card className="border-2 sm:col-span-2 md:col-span-1">
-            <CardHeader>
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                <Lock className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-              </div>
-              <CardTitle className="text-lg sm:text-xl">
-                Organize Files
-              </CardTitle>
-              <CardDescription className="text-sm sm:text-base">
-                Create folders and multiple files. Organize your code just like
-                a real project.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-        </div>
-
-        <div className="mt-12 sm:mt-16">
-          <h2 className="text-2xl sm:text-3xl font-bold text-center mb-6">
-            Explore Codespaces
-          </h2>
-          <div className="max-w-md mx-auto mb-6">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <div className="mt-20 sm:mt-28">
+          <div className="text-center mb-8">
+            <h2 className="text-3xl sm:text-4xl font-bold text-center mb-3 bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/80">
+              Explore Codespaces
+            </h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto">
+              Discover and explore public codespaces created by the community
+            </p>
+            <div className="h-1 w-16 bg-gradient-to-r from-blue-500 to-blue-500/30 mx-auto mt-4 rounded-full"></div>
+          </div>
+          
+          <div className="max-w-2xl mx-auto mb-10">
+            <div className="relative group">
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground/70 group-focus-within:text-blue-500 transition-colors" />
               <Input
                 type="text"
                 placeholder="Search codespaces..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
+                className="pl-12 py-6 text-base border-2 border-border/50 hover:border-blue-500/20 focus:border-blue-500/40 focus-visible:ring-0 focus-visible:ring-offset-0 transition-all duration-300 shadow-sm"
               />
             </div>
           </div>
@@ -200,32 +171,50 @@ export default function Home() {
               <p className="text-muted-foreground mt-2">Loading codespaces...</p>
             </div>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredCodespaces.map((codespace) => (
-                <Card key={codespace.id} className="hover:shadow-md transition-shadow">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-lg">{codespace.name}</CardTitle>
-                    <div className="flex justify-between items-center">
-                      <CardDescription>
-                        Created {new Date(codespace.created_at).toLocaleDateString()}
-                      </CardDescription>
-                      <div className="flex items-center text-sm text-muted-foreground">
-                        <Eye className="h-4 w-4 mr-1" />
-                        {codespace.visitor_count || 0}
-                      </div>
+            <div className="grid gap-5 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {filteredCodespaces.map((codespace) => (
+              <Card 
+                key={codespace.id} 
+                className="group relative overflow-hidden hover:-translate-y-1 transition-all duration-300 border-2 hover:border-blue-500/20 hover:shadow-lg"
+                onClick={() => router.push(`/${codespace.slug}`)}
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                <CardHeader className="relative">
+                  <div className="flex justify-between items-start mb-2">
+                    <CardTitle className="text-lg font-semibold text-foreground/90 group-hover:text-foreground transition-colors line-clamp-2">
+                      {codespace.name}
+                    </CardTitle>
+                    <div className="flex items-center px-2 py-1 rounded-full bg-muted/50 text-xs text-muted-foreground group-hover:bg-blue-500/10 group-hover:text-blue-500 transition-colors">
+                      <Eye className="h-3 w-3 mr-1" />
+                      <span>{codespace.visitor_count || 0}</span>
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => router.push(`/${codespace.slug}`)}
-                    >
-                      View Codespace
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
+                  </div>
+                  <div className="text-sm text-muted-foreground/80 group-hover:text-muted-foreground transition-colors">
+                    Created {new Date(codespace.created_at).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric'
+                    })}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Button
+                    variant="outline"
+                    className="w-full group-hover:bg-background/80 group-hover:border-blue-500/30 group-hover:text-foreground transition-all duration-300"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      router.push(`/${codespace.slug}`);
+                    }}
+                  >
+                    <span>View Codespace</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="ml-2 h-4 w-4 opacity-0 -translate-x-1 group-hover:translate-x-0 group-hover:opacity-100 transition-all duration-300">
+                      <path d="M5 12h14"></path>
+                      <path d="m12 5 7 7-7 7"></path>
+                    </svg>
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
               {filteredCodespaces.length === 0 && searchTerm && (
                 <p className="text-center text-muted-foreground col-span-full">
                   No codespaces found matching &quot;{searchTerm}&quot;
@@ -235,9 +224,24 @@ export default function Home() {
           )}
         </div>
 
-        <p className="mt-10 text-boldgit  text-muted-foreground text-center">
-          © {new Date().getFullYear()} Mushfiq R. — <a href="https://mushfiqbh.vercel.app" target="_blank" className="text-blue-500 hover:text-blue-600">Contact Developer</a>
-        </p>
+        <div className="mt-16 mb-8 sm:mb-12 text-center">
+          <div className="inline-flex items-center space-x-2 text-muted-foreground/70 text-sm">
+            <span>© {new Date().getFullYear()} Mushfiq R.</span>
+            <span className="text-muted-foreground/30">•</span>
+            <a 
+              href="https://mushfiqbh.vercel.app" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-foreground/80 hover:text-blue-500 transition-colors flex items-center group"
+            >
+              <span>Contact Developer</span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="ml-1 h-3.5 w-3.5 opacity-0 -translate-x-1 group-hover:translate-x-0 group-hover:opacity-100 transition-all duration-300">
+                <path d="M5 12h14"></path>
+                <path d="m12 5 7 7-7 7"></path>
+              </svg>
+            </a>
+          </div>
+        </div>
       </div>
       <Toaster />
     </div>
