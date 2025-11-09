@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { nanoid } from "nanoid";
 import { getSupabase } from "@/lib/supabase";
@@ -12,14 +12,47 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Code2, Loader2, Zap, Share2, Lock } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Code2, Loader2, Zap, Share2, Lock, Search, Eye } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
+import { Codespace } from "@/lib/supabase";
 
 export default function Home() {
   const router = useRouter();
   const { toast } = useToast();
   const [creating, setCreating] = useState(false);
+  const [codespaces, setCodespaces] = useState<Codespace[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [loadingCodespaces, setLoadingCodespaces] = useState(true);
+
+  useEffect(() => {
+    const fetchCodespaces = async () => {
+      try {
+        const supabase = getSupabase();
+        if (!supabase) return;
+
+        const { data, error } = await supabase
+          .from("codespaces")
+          .select("id, slug, name, visitor_count, created_at, updated_at")
+          .order("visitor_count", { ascending: false })
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+        setCodespaces(data || []);
+      } catch (error) {
+        console.error("Error fetching codespaces:", error);
+      } finally {
+        setLoadingCodespaces(false);
+      }
+    };
+
+    fetchCodespaces();
+  }, []);
+
+  const filteredCodespaces = codespaces.filter((codespace) =>
+    codespace.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   const handleCreateCodespace = async () => {
     try {
@@ -145,8 +178,65 @@ export default function Home() {
           </Card>
         </div>
 
+        <div className="mt-12 sm:mt-16">
+          <h2 className="text-2xl sm:text-3xl font-bold text-center mb-6">
+            Explore Codespaces
+          </h2>
+          <div className="max-w-md mx-auto mb-6">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search codespaces..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </div>
+          {loadingCodespaces ? (
+            <div className="text-center">
+              <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+              <p className="text-muted-foreground mt-2">Loading codespaces...</p>
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredCodespaces.map((codespace) => (
+                <Card key={codespace.id} className="hover:shadow-md transition-shadow">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg">{codespace.name}</CardTitle>
+                    <div className="flex justify-between items-center">
+                      <CardDescription>
+                        Created {new Date(codespace.created_at).toLocaleDateString()}
+                      </CardDescription>
+                      <div className="flex items-center text-sm text-muted-foreground">
+                        <Eye className="h-4 w-4 mr-1" />
+                        {codespace.visitor_count || 0}
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => router.push(`/${codespace.slug}`)}
+                    >
+                      View Codespace
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+              {filteredCodespaces.length === 0 && searchTerm && (
+                <p className="text-center text-muted-foreground col-span-full">
+                  No codespaces found matching &quot;{searchTerm}&quot;
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
         <p className="mt-10 text-boldgit  text-muted-foreground text-center">
-          © {new Date().getFullYear()} Mushfiq R. — Free to use
+          © {new Date().getFullYear()} Mushfiq R. — <a href="https://mushfiqbh.vercel.app" target="_blank" className="text-blue-500 hover:text-blue-600">Contact Developer</a>
         </p>
       </div>
       <Toaster />

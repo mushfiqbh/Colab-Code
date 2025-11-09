@@ -18,6 +18,7 @@ function debounce<T extends (...args: any[]) => any>(
 import { getSupabase, FileItem } from "@/lib/supabase";
 import { useCodespaceStore } from "@/store/codespace-store";
 import { FileTree } from "@/components/file-tree";
+import { isTextFile, encodeFileContent, isAllowedFileType } from "@/lib/file-utils";
 import { CodeEditor } from "@/components/code-editor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -478,41 +479,75 @@ export default function Codespace() {
     }
   };
 
-  const handleUploadImage = async (
+  const handleUploadFile = async (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const selectedFiles = event.target.files;
+    if (!selectedFiles || selectedFiles.length === 0) return;
 
-    // Validate file type
-    if (!file.type.startsWith("image/")) {
-      toast({
-        title: "Invalid file type",
-        description: "Please select an image file",
-        variant: "destructive",
-      });
-      return;
+    const maxSize = 1024 * 1024; // 1MB in bytes
+    const validFiles: File[] = [];
+    const invalidFiles: string[] = [];
+
+    // Validate all files first
+    for (let i = 0; i < selectedFiles.length; i++) {
+      const file = selectedFiles[i];
+      
+      // Check file type
+      if (!isAllowedFileType(file.name)) {
+        invalidFiles.push(`${file.name} (unsupported file type)`);
+        continue;
+      }
+      
+      // Check file size
+      if (file.size > maxSize) {
+        invalidFiles.push(`${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB - too large)`);
+      } else {
+        validFiles.push(file);
+      }
     }
 
-    // Validate file size (500KB limit)
-    const maxSize = 500 * 1024; // 500KB in bytes
-    if (file.size > maxSize) {
+    // Show error for oversized files
+    if (invalidFiles.length > 0) {
       toast({
-        title: "File too large",
-        description: "Image must be smaller than 500KB",
+        title: "Files not uploaded",
+        description: `The following files were rejected: ${invalidFiles.join(", ")}. Only text and image files under 1MB are allowed.`,
         variant: "destructive",
       });
-      return;
     }
 
-    try {
-      const supabase = getSupabase();
-      if (!supabase) throw new Error("Supabase not initialized");
+    if (validFiles.length === 0) return;
 
-      // Convert image to base64
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const base64Content = e.target?.result as string;
+    let successCount = 0;
+    let errorCount = 0;
+
+    // Process each valid file
+    for (const file of validFiles) {
+      try {
+        const supabase = getSupabase();
+        if (!supabase) throw new Error("Supabase not initialized");
+
+        // Convert file to base64 or text based on file type
+        const fileContent = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const result = e.target?.result as string;
+            if (isTextFile(file.name)) {
+              // For text files, decode base64 to plain text
+              const base64Data = result.split(',')[1];
+              try {
+                resolve(atob(base64Data));
+              } catch (error) {
+                reject(new Error("Failed to decode text file"));
+              }
+            } else {
+              // For binary files, keep as base64 data URL
+              resolve(result);
+            }
+          };
+          reader.onerror = () => reject(new Error("Failed to read file"));
+          reader.readAsDataURL(file);
+        });
 
         // Create file record in database
         const parentFolder = uploadParentId
@@ -528,7 +563,7 @@ export default function Codespace() {
             name: file.name,
             type: "file",
             parent_id: uploadParentId || null,
-            content: base64Content,
+            content: fileContent,
             language: null,
             path: filePath,
           })
@@ -539,33 +574,39 @@ export default function Codespace() {
 
         addFile(data);
         setFiles(sortFiles([...files, data]));
+        successCount++;
 
         // Expand the parent folder if it exists
         if (uploadParentId) {
           expandFolder(uploadParentId);
         }
+      } catch (error) {
+        console.error("Error uploading file:", file.name, error);
+        errorCount++;
+      }
+    }
 
-        toast({
-          title: "Image uploaded",
-          description: `${file.name} has been uploaded successfully`,
-        });
-      };
+    // Show results
+    if (successCount > 0) {
+      toast({
+        title: "Upload complete",
+        description: `${successCount} file${successCount > 1 ? 's' : ''} uploaded successfully${errorCount > 0 ? `, ${errorCount} failed` : ''}`,
+      });
+    }
 
-      reader.readAsDataURL(file);
-    } catch (error) {
-      console.error("Error uploading image:", error);
+    if (errorCount > 0 && successCount === 0) {
       toast({
         title: "Upload failed",
-        description: "Failed to upload image",
+        description: "Failed to upload all files",
         variant: "destructive",
       });
-    } finally {
-      // Clear the input and parent ID
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-      setUploadParentId(undefined);
     }
+
+    // Clear the input and parent ID
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+    setUploadParentId(undefined);
   };
 
   const handleContentChange = async (content: string) => {
@@ -575,14 +616,21 @@ export default function Codespace() {
       const supabase = getSupabase();
       if (!supabase) throw new Error("Supabase not initialized");
 
+      // Find the active file to check if it's a text file
+      const activeFile = files.find(f => f.id === activeFileId);
+      // Text files are stored as plain text, binary files as base64
+      const contentToSave = activeFile && isTextFile(activeFile.name) 
+        ? content
+        : encodeFileContent(content, activeFile?.name || '');
+
       const { error } = await supabase
         .from("files")
-        .update({ content, updated_at: new Date().toISOString() })
+        .update({ content: contentToSave, updated_at: new Date().toISOString() })
         .eq("id", activeFileId);
 
       if (error) throw error;
 
-      updateFile(activeFileId, { content });
+      updateFile(activeFileId, { content: contentToSave });
       // Clear dirty flag after successful save
       try {
         const { clearDirty } = useCodespaceStore.getState();
@@ -1071,7 +1119,7 @@ export default function Codespace() {
               onUnlockFile={handleUnlockFile}
               creatingItem={creatingItem}
               onCancelCreating={handleCancelCreating}
-              onUploadImage={(parentId) => {
+              onUploadFile={(parentId) => {
                 setUploadParentId(parentId);
                 fileInputRef.current?.click();
               }}
@@ -1079,8 +1127,9 @@ export default function Codespace() {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
-              onChange={handleUploadImage}
+              multiple
+              accept=".js,.jsx,.ts,.tsx,.py,.java,.cpp,.c,.cs,.go,.rs,.rb,.php,.swift,.kt,.scala,.html,.css,.scss,.sass,.json,.xml,.yaml,.yml,.md,.sql,.sh,.bash,.txt,.log,.ini,.cfg,.conf,.env,.gitignore,.dockerfile,.makefile,.readme,image/*"
+              onChange={handleUploadFile}
               className="hidden"
             />
           </div>

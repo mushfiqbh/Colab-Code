@@ -8,7 +8,7 @@ import { X, Copy, Download, Loader2, Lock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import JSZip from 'jszip';
 import { preloadMonaco } from '@/lib/monaco-preload';
-import { buildFilePath } from '@/lib/file-utils';
+import { buildFilePath, isTextFile } from '@/lib/file-utils';
 
 // Lazy load Monaco Editor
 const MonacoEditor = lazy(() =>
@@ -52,7 +52,9 @@ export function CodeEditor({ onContentChange }: CodeEditorProps) {
   // (this prevents the bug where switching to a new file shows the previously locked file's content).
   useEffect(() => {
     if (activeFile && lastActiveFileId.current !== activeFile.id) {
-      setFileContents((prev) => ({ ...prev, [activeFile.id]: activeFile.content || '' }));
+      // Show file content for all file types
+      const displayContent = activeFile.content || '';
+      setFileContents((prev) => ({ ...prev, [activeFile.id]: displayContent }));
       lastActiveFileId.current = activeFile.id;
     }
   }, [activeFile]);
@@ -60,7 +62,9 @@ export function CodeEditor({ onContentChange }: CodeEditorProps) {
   // If lock state changes for the active file, re-initialize the editor content to the saved file content.
   useEffect(() => {
     if (activeFile) {
-      setFileContents((prev) => ({ ...prev, [activeFile.id]: activeFile.content || '' }));
+      // Show file content for all file types
+      const displayContent = activeFile.content || '';
+      setFileContents((prev) => ({ ...prev, [activeFile.id]: displayContent }));
     }
   }, [activeFile]);
 
@@ -97,9 +101,7 @@ export function CodeEditor({ onContentChange }: CodeEditorProps) {
       files.forEach((file) => {
         if (file.type === 'file') {
           const content = fileContents[file.id] || file.content || '';
-          // Build the full path
-          const fullPath = buildFilePath(file.name, file.path);
-          zip.file(fullPath, content);
+          zip.file(buildFilePath(file.name, file.path), content);
         }
       });
 

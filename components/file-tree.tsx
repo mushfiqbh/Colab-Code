@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { preloadMonaco } from '@/lib/monaco-preload';
+import { isTextFile } from '@/lib/file-utils';
 
 type FileTreeProps = {
   files: FileItem[];
@@ -23,12 +24,12 @@ type FileTreeProps = {
   onCreateNewItem?: (type: 'file' | 'folder', name: string, parentId?: string) => void;
   onLockFile?: (file: FileItem) => void;
   onUnlockFile?: (file: FileItem) => void;
-  onUploadImage?: (parentId?: string) => void;
+  onUploadFile?: (parentId?: string) => void;
   creatingItem?: { type: 'file' | 'folder'; parentId?: string } | null;
   onCancelCreating?: () => void;
 };
 
-export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolder, onCreateFolderInFolder, onRenameFile, onCreateNewItem, onLockFile, onUnlockFile, onUploadImage, creatingItem, onCancelCreating }: FileTreeProps) {
+export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolder, onCreateFolderInFolder, onRenameFile, onCreateNewItem, onLockFile, onUnlockFile, onUploadFile, creatingItem, onCancelCreating }: FileTreeProps) {
   const { activeFileId, expandedFolders, toggleFolder } = useCodespaceStore();
   const [editingFileId, setEditingFileId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
@@ -41,12 +42,19 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
   const downloadFile = (file: FileItem) => {
     if (!file.content) return;
     
+    // Create a blob from the content (treat all files as text)
+    const blob = new Blob([file.content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    
     const link = document.createElement('a');
-    link.href = file.content;
+    link.href = url;
     link.download = file.name;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    
+    // Clean up object URL
+    URL.revokeObjectURL(url);
   };
 
   const rootFiles = files.filter((f) => !f.parent_id);
@@ -221,11 +229,11 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
                   <DropdownMenuItem
                     onClick={(e) => {
                       e.stopPropagation();
-                      onUploadImage?.(file.id);
+                      onUploadFile?.(file.id);
                     }}
                   >
                     <Upload className="h-4 w-4 mr-2" />
-                    Upload Image
+                    Upload Files
                   </DropdownMenuItem>
                 </>
               )}
