@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
+import { nanoid } from "nanoid";
 
 // Helper function for debouncing
 function debounce<T extends (...args: any[]) => any>(
@@ -59,6 +60,7 @@ import {
   Download,
   Eye,
   Check,
+  Copy,
 } from "lucide-react";
 import { buildFilePath, getFileLanguage, sortFiles } from "@/lib/file-utils";
 import { useToast } from "@/hooks/use-toast";
@@ -114,6 +116,7 @@ export default function Codespace() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [shareSlug, setShareSlug] = useState(slug);
+  const [cloning, setCloning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadCodespace = useCallback(async () => {
@@ -805,6 +808,90 @@ export default function Codespace() {
     }
   };
 
+  const handleCloneCodespace = async () => {
+    if (!codespaceId) {
+      return;
+    }
+
+    try {
+      setCloning(true);
+      const supabase = getSupabase();
+      if (!supabase) {
+        throw new Error("Supabase not initialized");
+      }
+
+      const newSlug = `${slug}-${nanoid(6)}`.toLowerCase();
+      const cloneName = name ? `${name} (Copy)` : "Untitled Codespace Copy";
+
+      const { data: newCodespace, error: cloneError } = await supabase
+        .from("codespaces")
+        .insert({
+          slug: newSlug,
+          name: cloneName,
+        })
+        .select()
+        .single();
+
+      if (cloneError) throw cloneError;
+
+      if (newCodespace && files.length > 0) {
+        const depthForPath = (path: string) =>
+          path.split("/").filter(Boolean).length;
+
+        const filesByDepth = [...files].sort(
+          (a, b) => depthForPath(a.path) - depthForPath(b.path)
+        );
+
+        const idMap = new Map<string, string>();
+
+        for (const file of filesByDepth) {
+          const parentId = file.parent_id
+            ? idMap.get(file.parent_id) ?? null
+            : null;
+
+          const { data: insertedFile, error: insertError } = await supabase
+            .from("files")
+            .insert({
+              codespace_id: newCodespace.id,
+              name: file.name,
+              type: file.type,
+              parent_id: parentId,
+              content: file.type === "file" ? file.content : null,
+              language: file.language,
+              path: file.path,
+              is_locked: file.is_locked,
+            })
+            .select()
+            .single();
+
+          if (insertError) throw insertError;
+
+          if (insertedFile?.id) {
+            idMap.set(file.id, insertedFile.id);
+          }
+        }
+      }
+
+      toast({
+        title: "Codespace cloned",
+        description: "Opening the duplicate in a new tab.",
+      });
+
+      if (typeof window !== "undefined") {
+        window.open(`/${newSlug}`, "_blank");
+      }
+    } catch (error) {
+      console.error("Error cloning codespace:", error);
+      toast({
+        title: "Clone failed",
+        description: "We could not clone this codespace. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setCloning(false);
+    }
+  };
+
   const handleShare = () => {
     setShareSlug(slug);
     setShareModalOpen(true);
@@ -988,6 +1075,22 @@ export default function Codespace() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">                
                 <DropdownMenuItem
+                  onClick={() => {
+                    if (cloning) return;
+                    setMobileMenuOpen(false);
+                    handleCloneCodespace();
+                  }}
+                  className="flex items-center gap-2"
+                  disabled={cloning}
+                >
+                  {cloning ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                  <span>{cloning ? "Cloning..." : "Clone This Codespace"}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
                   onClick={handleShare}
                   className="flex items-center gap-2"
                 >
@@ -1009,15 +1112,29 @@ export default function Codespace() {
             </DropdownMenu>
           </div>
 
-          <Button
-            onClick={handleShare}
-            variant="outline"
-            size="sm"
-            className="hidden sm:flex"
-          >
-            <Share2 className="h-4 w-4 mr-2" />
-            Share
-          </Button>
+          <div className="hidden sm:flex items-center gap-2">
+            <Button
+              onClick={handleCloneCodespace}
+              variant="outline"
+              size="sm"
+              disabled={cloning}
+            >
+              {cloning ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Copy className="h-4 w-4 mr-2" />
+              )}
+              {cloning ? "Cloning" : "Clone This Codespace"}
+            </Button>
+            <Button
+              onClick={handleShare}
+              variant="outline"
+              size="sm"
+            >
+              <Share2 className="h-4 w-4 mr-2" />
+              Share
+            </Button>
+          </div>
         </div>
       </header>
 
