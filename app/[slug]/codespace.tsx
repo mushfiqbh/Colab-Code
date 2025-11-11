@@ -18,9 +18,9 @@ function debounce<T extends (...args: any[]) => any>(
 }
 
 // Idle refresh timings (milliseconds)
-const IDLE_REFRESH_THRESHOLD_MS = 2 * 60 * 1000;
+const IDLE_REFRESH_THRESHOLD_MS = 30 * 1000;
 const IDLE_CHECK_INTERVAL_MS = 15 * 1000;
-const AUTO_REFRESH_GAP_MS = 2 * 60 * 1000;
+const AUTO_REFRESH_GAP_MS = 60 * 1000;
 import { getSupabase, FileItem } from "@/lib/supabase";
 import { useCodespaceStore } from "@/store/codespace-store";
 import { FileTree } from "@/components/file-tree";
