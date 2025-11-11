@@ -16,6 +16,11 @@ function debounce<T extends (...args: any[]) => any>(
     timeout = setTimeout(() => func(...args), wait);
   };
 }
+
+// Idle refresh timings (milliseconds)
+const IDLE_REFRESH_THRESHOLD_MS = 2 * 60 * 1000;
+const IDLE_CHECK_INTERVAL_MS = 15 * 1000;
+const AUTO_REFRESH_GAP_MS = 2 * 60 * 1000;
 import { getSupabase, FileItem } from "@/lib/supabase";
 import { useCodespaceStore } from "@/store/codespace-store";
 import { FileTree } from "@/components/file-tree";
@@ -119,6 +124,14 @@ export default function Codespace() {
   const [cloning, setCloning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const lastActivityRef = useRef<number>(Date.now());
+  const lastIdleRefreshRef = useRef<number | null>(null);
+
+  const registerActivity = useCallback(() => {
+    lastActivityRef.current = Date.now();
+    lastIdleRefreshRef.current = null;
+  }, []);
+
   const loadCodespace = useCallback(async () => {
     try {
       setLoading(true);
@@ -198,6 +211,83 @@ export default function Codespace() {
   useEffect(() => {
     loadCodespace();
   }, [slug, loadCodespace]);
+
+  useEffect(() => {
+    registerActivity();
+  }, [registerActivity, slug]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return;
+    }
+
+    const activityEvents: (keyof WindowEventMap)[] = [
+      "mousemove",
+      "mousedown",
+      "keydown",
+      "touchstart",
+      "pointerdown",
+      "wheel",
+      "scroll",
+    ];
+
+    const handleActivity = () => {
+      registerActivity();
+    };
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        registerActivity();
+      }
+    };
+
+    activityEvents.forEach((event) => {
+      window.addEventListener(event, handleActivity, { passive: true });
+    });
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      activityEvents.forEach((event) => {
+        window.removeEventListener(event, handleActivity);
+      });
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [registerActivity]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      const now = Date.now();
+      const idleDuration = now - lastActivityRef.current;
+      const timeSinceLastRefresh =
+        lastIdleRefreshRef.current !== null
+          ? now - lastIdleRefreshRef.current
+          : null;
+
+      const hasUnsavedChanges =
+        useCodespaceStore.getState().unsavedFileIds.size > 0;
+
+      if (document.hidden || loading || hasUnsavedChanges) {
+        return;
+      }
+
+      if (
+        idleDuration >= IDLE_REFRESH_THRESHOLD_MS &&
+        (timeSinceLastRefresh === null || timeSinceLastRefresh >= AUTO_REFRESH_GAP_MS)
+      ) {
+        lastIdleRefreshRef.current = now;
+        lastActivityRef.current = now;
+        loadCodespace();
+      }
+    }, IDLE_CHECK_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [loadCodespace, loading]);
 
   // Auto-open sidebar on mobile when no file is active
   useEffect(() => {
@@ -292,6 +382,7 @@ export default function Codespace() {
   };
 
   const handleRefresh = async () => {
+    registerActivity();
     await loadCodespace();
     toast({
       title: "Refreshed",
@@ -616,6 +707,7 @@ export default function Codespace() {
     if (!activeFileId) return;
 
     try {
+      registerActivity();
       const supabase = getSupabase();
       if (!supabase) throw new Error("Supabase not initialized");
 
