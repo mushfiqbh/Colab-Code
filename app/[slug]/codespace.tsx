@@ -703,40 +703,44 @@ export default function Codespace() {
     setUploadParentId(undefined);
   };
 
-  const handleContentChange = async (content: string) => {
-    if (!activeFileId) return;
+  // Auto-save handler with debounce
+  const handleContentChange = useCallback(
+    debounce(async (content: string) => {
+      if (!activeFileId) return;
 
-    try {
-      registerActivity();
-      const supabase = getSupabase();
-      if (!supabase) throw new Error("Supabase not initialized");
-
-      // Find the active file to check if it's a text file
-      const activeFile = files.find(f => f.id === activeFileId);
-      // Text files are stored as plain text, binary files as base64
-      const contentToSave = activeFile && isTextFile(activeFile.name) 
-        ? content
-        : encodeFileContent(content, activeFile?.name || '');
-
-      const { error } = await supabase
-        .from("files")
-        .update({ content: contentToSave, updated_at: new Date().toISOString() })
-        .eq("id", activeFileId);
-
-      if (error) throw error;
-
-      updateFile(activeFileId, { content: contentToSave });
-      // Clear dirty flag after successful save
       try {
-        const { clearDirty } = useCodespaceStore.getState();
-        clearDirty(activeFileId);
-      } catch (e) {
-        // ignore if store not available
+        registerActivity();
+        const supabase = getSupabase();
+        if (!supabase) throw new Error("Supabase not initialized");
+
+        // Find the active file to check if it's a text file
+        const activeFile = files.find(f => f.id === activeFileId);
+        // Text files are stored as plain text, binary files as base64
+        const contentToSave = activeFile && isTextFile(activeFile.name) 
+          ? content
+          : encodeFileContent(content, activeFile?.name || '');
+
+        const { error } = await supabase
+          .from("files")
+          .update({ content: contentToSave, updated_at: new Date().toISOString() })
+          .eq("id", activeFileId);
+
+        if (error) throw error;
+
+        updateFile(activeFileId, { content: contentToSave });
+        // Clear dirty flag after successful save
+        try {
+          const { clearDirty } = useCodespaceStore.getState();
+          clearDirty(activeFileId);
+        } catch (e) {
+          // ignore if store not available
+        }
+      } catch (error) {
+        console.error("Error updating file:", error);
       }
-    } catch (error) {
-      console.error("Error updating file:", error);
-    }
-  };
+    }, 2000), // Auto-save after 2 seconds of inactivity
+    [activeFileId, files, registerActivity, updateFile]
+  );
 
   const handleUpdateName = async () => {
     if (!codespaceId || !tempName.trim()) return;
