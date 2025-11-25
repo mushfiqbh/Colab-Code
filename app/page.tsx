@@ -1,59 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { nanoid } from "nanoid";
-import { FolderOpen } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Code2, Loader2, Zap, Share2, Lock, Search, Eye } from "lucide-react";
+import { Loader2, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
-import { Codespace } from "@/lib/supabase";
+import Screenshot1 from "@/assets/screenshot1.png";
+import Image from "next/image";
 
 export default function Home() {
   const router = useRouter();
   const { toast } = useToast();
   const [creating, setCreating] = useState(false);
-  const [codespaces, setCodespaces] = useState<Codespace[]>([]);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [loadingCodespaces, setLoadingCodespaces] = useState(true);
-
-  useEffect(() => {
-    const fetchCodespaces = async () => {
-      try {
-        const supabase = getSupabase();
-        if (!supabase) return;
-
-        const { data, error } = await supabase
-          .from("codespaces")
-          .select("id, slug, name, visitor_count, created_at, updated_at")
-          .order("visitor_count", { ascending: false })
-          .order("created_at", { ascending: false });
-
-        if (error) throw error;
-        setCodespaces(data || []);
-      } catch (error) {
-        console.error("Error fetching codespaces:", error);
-      } finally {
-        setLoadingCodespaces(false);
-      }
-    };
-
-    fetchCodespaces();
-  }, []);
-
-  const filteredCodespaces = codespaces.filter((codespace) =>
-    codespace.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   const handleCreateCodespace = async () => {
     try {
@@ -105,10 +66,10 @@ export default function Home() {
         <div className="absolute top-1/2 left-1/2 w-1/2 h-1/2 bg-gradient-to-tl from-emerald-500/20 to-transparent rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-4000"></div>
       </div>
       <div className="container max-w-6xl mx-auto px-4 py-8 sm:py-16">
-        <div className="text-center space-y-6 sm:space-y-8 mb-16 sm:mb-20">
+        <div className="text-center space-y-6 sm:space-y-8 mb-16 sm:mb-24">
           <div className="space-y-4 mt-16">
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/80">
-              Share Code Instantly
+              Share Codebase Instantly
             </h1>
             <div className="h-1.5 w-24 bg-gradient-to-r from-blue-500 to-blue-500/30 mx-auto rounded-full"></div>
           </div>
@@ -142,7 +103,58 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="mt-16 mb-8 sm:mb-12 text-center">
+        {/* Features Section */}
+        <div className="mb-16 sm:mb-20">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="text-center p-6 rounded-lg bg-card border border-border/50 shadow-sm hover:shadow-md transition-shadow">
+              <Zap className="h-12 w-12 mx-auto mb-4 text-blue-500" />
+              <h3 className="text-xl font-semibold mb-2">Instant Creation</h3>
+              <p className="text-muted-foreground">Create a codespace in seconds without any setup or login required.</p>
+            </div>
+            <div className="text-center p-6 rounded-lg bg-card border border-border/50 shadow-sm hover:shadow-md transition-shadow">
+              <svg className="h-12 w-12 mx-auto mb-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              <h3 className="text-xl font-semibold mb-2">Collaborate Easily</h3>
+              <p className="text-muted-foreground">Share your code snippets with others for seamless collaboration and reviews.</p>
+            </div>
+            <div className="text-center p-6 rounded-lg bg-card border border-border/50 shadow-sm hover:shadow-md transition-shadow">
+              <svg className="h-12 w-12 mx-auto mb-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <h3 className="text-xl font-semibold mb-2">Secure & Private</h3>
+              <p className="text-muted-foreground">Your code is stored securely, and you control who can access your codespaces.</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Screenshot Section */}
+        <div className="mb-16 sm:mb-20">
+          <div className="text-center mb-8">
+            <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4">
+              See It In Action
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Experience our intuitive code editor with syntax highlighting, file management, and real-time collaboration features.
+            </p>
+          </div>
+          <div className="flex justify-center">
+            <div className="relative max-w-5xl w-full">
+              <div className="rounded-lg overflow-hidden border border-border/50 shadow-2xl">
+                <Image
+                  src={Screenshot1}
+                  alt="Codespace Editor Screenshot"
+                  width={1200}
+                  height={800}
+                  className="w-full h-auto"
+                  priority
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-16 text-center">
           <div className="inline-flex items-center space-x-2 text-muted-foreground/70 text-sm">
             <span>© {new Date().getFullYear()} Mushfiq R.</span>
             <span className="text-muted-foreground/30">•</span>
