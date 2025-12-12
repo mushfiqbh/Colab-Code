@@ -281,6 +281,15 @@ export function CodeEditor({ onContentChange }: CodeEditorProps) {
     if (activeFile && activeFile.is_locked) return;
 
     setFileContents((prev) => ({ ...prev, [fileId]: content }));
+    
+    // Mark file as dirty if content changed from saved version
+    const file = files.find(f => f.id === fileId);
+    if (file && content !== (file.content || '')) {
+      markDirty(fileId);
+    } else if (file) {
+      clearDirty(fileId);
+    }
+    
     onContentChange(content);
   };
 
@@ -312,32 +321,38 @@ export function CodeEditor({ onContentChange }: CodeEditorProps) {
     );
   }
 
+  const { unsavedFileIds } = useCodespaceStore.getState();
+
   return (
     <>
       <div className="flex flex-col h-full">
       {/* File Tabs */}
       <div className="flex items-center border-b bg-muted/30 overflow-x-auto">
         <div className="flex-1 flex min-w-0">
-          {openFiles.map((file) => (
-            <div
-              key={file.id}
-              className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 border-r cursor-pointer hover:bg-muted/50 transition-colors min-w-0 flex-shrink-0 ${
-                activeFileId === file.id ? 'bg-background border-b-2 border-b-primary' : ''
-              }`}
-              onClick={() => {
-                const { unsavedFileIds } = useCodespaceStore.getState();
-                if (unsavedFileIds && unsavedFileIds.size > 0 && activeFileId !== file.id) {
-                  toast({
-                    title: 'Save changes',
-                    description: 'Please save current changes before switching files',
-                  });
-                  return;
-                }
-                setActiveFile(file.id);
-              }}
-            >
-              <span className="text-xs sm:text-sm font-medium truncate max-w-20 sm:max-w-32">{file.name}</span>
-              {file.is_locked && <Lock className="h-3 w-3 flex-shrink-0 text-orange-500" />}
+          {openFiles.map((file) => {
+            const isUnsaved = unsavedFileIds.has(file.id);
+            return (
+              <div
+                key={file.id}
+                className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 border-r cursor-pointer hover:bg-muted/50 transition-colors min-w-0 flex-shrink-0 ${
+                  activeFileId === file.id ? 'bg-background border-b-2 border-b-primary' : ''
+                }`}
+                onClick={() => {
+                  const { unsavedFileIds } = useCodespaceStore.getState();
+                  if (unsavedFileIds && unsavedFileIds.size > 0 && activeFileId !== file.id) {
+                    toast({
+                      title: 'Save changes',
+                      description: 'Please save current changes before switching files',
+                    });
+                    return;
+                  }
+                  setActiveFile(file.id);
+                }}
+              >
+                <span className={`text-xs sm:text-sm font-medium truncate max-w-20 sm:max-w-32 ${isUnsaved ? 'italic' : ''}`}>
+                  {isUnsaved && '• '}{file.name}
+                </span>
+                {file.is_locked && <Lock className="h-3 w-3 flex-shrink-0 text-orange-500" />}
               {file.language && (
                 <span className="hidden sm:inline text-xs text-muted-foreground px-1.5 py-0.5 bg-muted rounded">
                   {file.language}
@@ -368,7 +383,8 @@ export function CodeEditor({ onContentChange }: CodeEditorProps) {
                 <X className="h-3 w-3" />
               </Button>
             </div>
-          ))}
+          );
+          })}
         </div>
       </div>
 

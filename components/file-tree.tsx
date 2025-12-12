@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { FileItem } from '@/lib/supabase';
 import { useCodespaceStore } from '@/store/codespace-store';
-import { ChevronRight, ChevronDown, File, Folder, FolderOpen, Plus, FileText, MoreVertical, Edit, Trash2, Lock, Unlock, Image, Upload, Download } from 'lucide-react';
+import { ChevronRight, ChevronDown, File, Folder, FolderOpen, Plus, FileText, MoreVertical, Edit, Trash2, Lock, Unlock, Image, Upload, Download, Loader2 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,7 +30,7 @@ type FileTreeProps = {
 };
 
 export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolder, onCreateFolderInFolder, onRenameFile, onCreateNewItem, onLockFile, onUnlockFile, onUploadFile, creatingItem, onCancelCreating }: FileTreeProps) {
-  const { activeFileId, expandedFolders, toggleFolder } = useCodespaceStore();
+  const { activeFileId, expandedFolders, toggleFolder, unsavedFileIds, savingFileIds } = useCodespaceStore();
   const [editingFileId, setEditingFileId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
 
@@ -180,9 +180,14 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
             />
           ) : (
             <div className="flex-1 flex items-center gap-1 min-w-0">
-              <span className="text-sm truncate">{file.name}</span>
+              <span className={`text-sm truncate ${unsavedFileIds.has(file.id) && !savingFileIds.has(file.id) ? 'italic' : ''}`}>
+                {unsavedFileIds.has(file.id) && !savingFileIds.has(file.id) && '• '}{file.name}
+              </span>
               {file.is_locked && !isFolder && (
                 <Lock className="h-3 w-3 flex-shrink-0 text-orange-500" />
+              )}
+              {savingFileIds.has(file.id) && !isFolder && (
+                <Loader2 className="h-3 w-3 flex-shrink-0 text-primary animate-spin" title="Saving..." />
               )}
             </div>
           )}

@@ -11,6 +11,7 @@ type CodespaceStore = {
   openFileIds: string[];
   expandedFolders: Set<string>;
   unsavedFileIds: Set<string>;
+  savingFileIds: Set<string>;
 
   setCodespace: (id: string, slug: string, name: string, visitorCount?: number) => void;
   setFiles: (files: FileItem[]) => void;
@@ -21,6 +22,8 @@ type CodespaceStore = {
   unlockFile: (id: string) => void;
   markDirty: (id: string) => void;
   clearDirty: (id: string) => void;
+  markSaving: (id: string) => void;
+  clearSaving: (id: string) => void;
   setActiveFile: (id: string | null) => void;
   openFile: (id: string) => void;
   closeFile: (id: string) => void;
@@ -42,6 +45,7 @@ export const useCodespaceStore = create<CodespaceStore>((set) => ({
   openFileIds: [],
   expandedFolders: new Set(),
   unsavedFileIds: new Set(),
+  savingFileIds: new Set(),
 
   setCodespace: (id, slug, name, visitorCount = 0) =>
     set({ codespaceId: id, slug, name, visitorCount }),
@@ -84,6 +88,20 @@ export const useCodespaceStore = create<CodespaceStore>((set) => ({
       const s = new Set(state.unsavedFileIds);
       s.delete(id);
       return { unsavedFileIds: s };
+    }),
+
+  markSaving: (id) =>
+    set((state) => {
+      const s = new Set(state.savingFileIds);
+      s.add(id);
+      return { savingFileIds: s };
+    }),
+
+  clearSaving: (id) =>
+    set((state) => {
+      const s = new Set(state.savingFileIds);
+      s.delete(id);
+      return { savingFileIds: s };
     }),
 
   deleteFile: (id) =>
@@ -165,6 +183,20 @@ export const useCodespaceStore = create<CodespaceStore>((set) => ({
   incrementVisitorCount: () =>
     set((state) => ({ visitorCount: state.visitorCount + 1 })),
 
+  markSaving: (id) =>
+    set((state) => {
+      const s = new Set(state.savingFileIds);
+      s.add(id);
+      return { savingFileIds: s };
+    }),
+
+  clearSaving: (id) =>
+    set((state) => {
+      const s = new Set(state.savingFileIds);
+      s.delete(id);
+      return { savingFileIds: s };
+    }),
+
   reset: () =>
     set({
       codespaceId: null,
@@ -176,5 +208,6 @@ export const useCodespaceStore = create<CodespaceStore>((set) => ({
       openFileIds: [],
       expandedFolders: new Set(),
       unsavedFileIds: new Set(),
+      savingFileIds: new Set(),
     }),
 }));

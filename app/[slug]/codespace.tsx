@@ -122,6 +122,7 @@ export default function Codespace() {
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [shareSlug, setShareSlug] = useState(slug);
   const [cloning, setCloning] = useState(false);
+  const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const lastActivityRef = useRef<number>(Date.now());
@@ -211,6 +212,20 @@ export default function Codespace() {
   useEffect(() => {
     loadCodespace();
   }, [slug, loadCodespace]);
+
+  // Add keyboard shortcut for Ctrl+S to save
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        handleManualSave();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFileId, files]);
 
   useEffect(() => {
     registerActivity();
@@ -703,18 +718,84 @@ export default function Codespace() {
     setUploadParentId(undefined);
   };
 
+  // Manual save function
+  const handleManualSave = async () => {
+    if (!activeFileId) return;
+
+    try {
+      registerActivity();
+      setSaving(true);
+      const { markSaving } = useCodespaceStore.getState();
+      markSaving(activeFileId);
+      const supabase = getSupabase();
+      if (!supabase) throw new Error("Supabase not initialized");
+
+      const activeFile = files.find(f => f.id === activeFileId);
+      if (!activeFile) {
+        setSaving(false);
+        return;
+      }
+
+      // Get current content from store
+      const { unsavedFileIds } = useCodespaceStore.getState();
+      if (!unsavedFileIds.has(activeFileId)) {
+        toast({
+          title: "No changes",
+          description: "File is already saved",
+        });
+        setSaving(false);
+        return;
+      }
+
+      // Text files are stored as plain text, binary files as base64
+      const contentToSave = activeFile.content;
+
+      const { error } = await supabase
+        .from("files")
+        .update({ content: contentToSave, updated_at: new Date().toISOString() })
+        .eq("id", activeFileId);
+
+      if (error) throw error;
+
+      updateFile(activeFileId, { content: contentToSave });
+      // Clear dirty flag after successful save
+      const { clearDirty, clearSaving } = useCodespaceStore.getState();
+      clearDirty(activeFileId);
+      clearSaving(activeFileId);
+      
+      setSaving(false);
+      toast({
+        title: "Saved",
+        description: "File saved successfully",
+      });
+    } catch (error) {
+      console.error("Error saving file:", error);
+      const { clearSaving } = useCodespaceStore.getState();
+      clearSaving(activeFileId);
+      setSaving(false);
+      toast({
+        title: "Error",
+        description: "Failed to save file",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Auto-save handler with debounce
-  const handleContentChange = useCallback(
-    debounce(async (content: string) => {
-      if (!activeFileId) return;
+  const debouncedSave = useRef(
+    debounce(async (content: string, fileId: string, filesList: FileItem[]) => {
+      if (!fileId) return;
 
       try {
         registerActivity();
+        setSaving(true);
+        const { markSaving } = useCodespaceStore.getState();
+        markSaving(fileId);
         const supabase = getSupabase();
         if (!supabase) throw new Error("Supabase not initialized");
 
         // Find the active file to check if it's a text file
-        const activeFile = files.find(f => f.id === activeFileId);
+        const activeFile = filesList.find(f => f.id === fileId);
         // Text files are stored as plain text, binary files as base64
         const contentToSave = activeFile && isTextFile(activeFile.name) 
           ? content
@@ -723,24 +804,35 @@ export default function Codespace() {
         const { error } = await supabase
           .from("files")
           .update({ content: contentToSave, updated_at: new Date().toISOString() })
-          .eq("id", activeFileId);
+          .eq("id", fileId);
 
         if (error) throw error;
 
-        updateFile(activeFileId, { content: contentToSave });
+        updateFile(fileId, { content: contentToSave });
         // Clear dirty flag after successful save
-        try {
-          const { clearDirty } = useCodespaceStore.getState();
-          clearDirty(activeFileId);
-        } catch (e) {
-          // ignore if store not available
-        }
+        const { clearDirty, clearSaving } = useCodespaceStore.getState();
+        clearDirty(fileId);
+        clearSaving(fileId);
+        
+        setSaving(false);
       } catch (error) {
         console.error("Error updating file:", error);
+        const { clearSaving } = useCodespaceStore.getState();
+        clearSaving(fileId);
+        setSaving(false);
+        toast({
+          title: "Error",
+          description: "Failed to save file",
+          variant: "destructive",
+        });
       }
-    }, 2000), // Auto-save after 2 seconds of inactivity
-    [activeFileId, files, registerActivity, updateFile]
+    }, 2000)
   );
+
+  const handleContentChange = useCallback((content: string) => {
+    if (!activeFileId) return;
+    debouncedSave.current(content, activeFileId, files);
+  }, [activeFileId, files]);
 
   const handleUpdateName = async () => {
     if (!codespaceId || !tempName.trim()) return;
@@ -1169,7 +1261,24 @@ export default function Codespace() {
                   <ChevronDown className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">                
+              <DropdownMenuContent align="end" className="w-48">
+                {activeFileId && (
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      handleManualSave();
+                    }}
+                    className="flex items-center gap-2"
+                    disabled={saving}
+                  >
+                    {saving ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Check className="h-4 w-4" />
+                    )}
+                    <span>{saving ? "Saving..." : "Save File"}</span>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem
                   onClick={() => {
                     if (cloning) return;
@@ -1209,6 +1318,23 @@ export default function Codespace() {
           </div>
 
           <div className="hidden sm:flex items-center gap-2">
+            {activeFileId && (
+              <Button
+                onClick={handleManualSave}
+                variant="default"
+                size="sm"
+                disabled={saving}
+                title="Save (Ctrl+S)"
+                className="min-w-[100px]"
+              >
+                {saving ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Check className="h-4 w-4 mr-2" />
+                )}
+                {saving ? "Saving..." : "Save"}
+              </Button>
+            )}
             <Button
               onClick={handleCloneCodespace}
               variant="outline"
