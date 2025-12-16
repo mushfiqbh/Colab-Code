@@ -1,6 +1,6 @@
 {
   "name": "colab-code",
-  "version": "0.8.0",
+  "version": "1.0.2",
   "private": true,
   "scripts": {
     "dev": "next dev",

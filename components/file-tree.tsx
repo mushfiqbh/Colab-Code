@@ -187,7 +187,7 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
                 <Lock className="h-3 w-3 flex-shrink-0 text-orange-500" />
               )}
               {savingFileIds.has(file.id) && !isFolder && (
-                <Loader2 className="h-3 w-3 flex-shrink-0 text-primary animate-spin" title="Saving..." />
+                <Loader2 className="h-3 w-3 flex-shrink-0 text-primary animate-spin" />
               )}
             </div>
           )}

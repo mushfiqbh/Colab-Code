@@ -183,20 +183,6 @@ export const useCodespaceStore = create<CodespaceStore>((set) => ({
   incrementVisitorCount: () =>
     set((state) => ({ visitorCount: state.visitorCount + 1 })),
 
-  markSaving: (id) =>
-    set((state) => {
-      const s = new Set(state.savingFileIds);
-      s.add(id);
-      return { savingFileIds: s };
-    }),
-
-  clearSaving: (id) =>
-    set((state) => {
-      const s = new Set(state.savingFileIds);
-      s.delete(id);
-      return { savingFileIds: s };
-    }),
-
   reset: () =>
     set({
       codespaceId: null,

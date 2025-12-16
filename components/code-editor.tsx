@@ -462,7 +462,7 @@ export function CodeEditor({ onContentChange }: CodeEditorProps) {
         <>
           <button
             type="button"
-            className="md:hidden fixed bottom-4 right-4 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="md:hidden fixed bottom-96 right-4 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => setMobileCommentsOpen((previous) => !previous)}
             aria-label={mobileCommentsOpen ? 'Hide comments' : 'Show comments'}
           >
