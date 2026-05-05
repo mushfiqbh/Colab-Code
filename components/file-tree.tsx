@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FileItem } from '@/lib/supabase';
 import { useCodespaceStore } from '@/store/codespace-store';
 import { ChevronRight, ChevronDown, File, Folder, FolderOpen, Plus, FileText, MoreVertical, Edit, Trash2, Lock, Unlock, Image, Upload, Download, Loader2 } from 'lucide-react';
@@ -33,6 +33,9 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
   const { activeFileId, expandedFolders, toggleFolder, unsavedFileIds, savingFileIds } = useCodespaceStore();
   const [editingFileId, setEditingFileId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
+  const editInputRef = useRef<HTMLInputElement | null>(null);
+  const createInputRef = useRef<HTMLInputElement | null>(null);
+  const suppressMenuFocusRestoreRef = useRef(false);
 
   const isImageFile = (file: FileItem) => {
     return file.content?.startsWith('data:image/') || 
@@ -64,6 +67,7 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
   };
 
   const startEditing = (file: FileItem) => {
+    suppressMenuFocusRestoreRef.current = true;
     setEditingFileId(file.id);
     setEditingName(file.name);
   };
@@ -85,6 +89,7 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
   };
 
   const startCreating = (type: 'file' | 'folder', parentId?: string) => {
+    suppressMenuFocusRestoreRef.current = true;
     onCreateNewItem?.(type, '', parentId);
   };
 
@@ -116,6 +121,24 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
       }
     }
   };
+
+  useEffect(() => {
+    if (editingFileId) {
+      requestAnimationFrame(() => {
+        editInputRef.current?.focus();
+        editInputRef.current?.select();
+      });
+    }
+  }, [editingFileId]);
+
+  useEffect(() => {
+    if (creatingItem) {
+      requestAnimationFrame(() => {
+        createInputRef.current?.focus();
+        createInputRef.current?.select();
+      });
+    }
+  }, [creatingItem]);
 
   const renderFileItem = (file: FileItem, depth: number = 0) => {
     const isFolder = file.type === 'folder';
@@ -170,6 +193,7 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
 
           {editingFileId === file.id ? (
             <input
+              ref={editInputRef}
               value={editingName}
               onChange={(e) => setEditingName(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -192,6 +216,35 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
             </div>
           )}
 
+          {isFolder && (
+            <>
+              <button
+                type="button"
+                className="opacity-0 group-hover:opacity-100 md:opacity-0 md:group-hover:opacity-100 text-muted-foreground hover:text-foreground p-2 rounded hover:bg-accent transition-opacity min-w-[44px] min-h-[44px] flex items-center justify-center"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCreateFileInFolder?.(file.id);
+                }}
+                title="New File"
+                aria-label={`Create new file in ${file.name}`}
+              >
+                <FileText className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                className="opacity-0 group-hover:opacity-100 md:opacity-0 md:group-hover:opacity-100 text-muted-foreground hover:text-foreground p-2 rounded hover:bg-accent transition-opacity min-w-[44px] min-h-[44px] flex items-center justify-center"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCreateFolderInFolder?.(file.id);
+                }}
+                title="New Folder"
+                aria-label={`Create new folder in ${file.name}`}
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </>
+          )}
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -201,7 +254,16 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
                 <MoreVertical className="h-4 w-4" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuContent
+              align="end"
+              className="w-48"
+              onCloseAutoFocus={(event) => {
+                if (suppressMenuFocusRestoreRef.current) {
+                  event.preventDefault();
+                  suppressMenuFocusRestoreRef.current = false;
+                }
+              }}
+            >
               <DropdownMenuItem
                 onClick={(e) => {
                   e.stopPropagation();
@@ -216,6 +278,7 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
                   <DropdownMenuItem
                     onClick={(e) => {
                       e.stopPropagation();
+                      suppressMenuFocusRestoreRef.current = true;
                       onCreateFileInFolder?.(file.id);
                     }}
                   >
@@ -225,6 +288,7 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
                   <DropdownMenuItem
                     onClick={(e) => {
                       e.stopPropagation();
+                      suppressMenuFocusRestoreRef.current = true;
                       onCreateFolderInFolder?.(file.id);
                     }}
                   >
@@ -302,6 +366,7 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
                   <File className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
                 )}
                 <input
+                  ref={createInputRef}
                   value={editingName}
                   onChange={(e) => setEditingName(e.target.value)}
                   onKeyDown={handleKeyDown}
@@ -330,6 +395,7 @@ export function FileTree({ files, onFileClick, onDeleteFile, onCreateFileInFolde
             <File className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
           )}
           <input
+            ref={createInputRef}
             value={editingName}
             onChange={(e) => setEditingName(e.target.value)}
             onKeyDown={handleKeyDown}
